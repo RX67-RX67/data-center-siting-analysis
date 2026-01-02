@@ -69,7 +69,7 @@ The timing is also contextually relevant: since late 2022, the launch of ChatGPT
 - **Environmental Risk**:
 
 - **Extreme Temperature Frequency**: [Visit Data Source](https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/county/mapping/110/hdd/202312/12/value) [Visit Data Source](https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/county/mapping/110/cdd/202312/12/value)
-- **Earthquake Frequency**: [Visit Data Source](https://www.bts.gov/ctp)
+- **Earthquake Frequency**: [Visit Data Source](https://resilience.climate.gov/datasets/FEMA::national-risk-index-counties/about)
 - **Storm and Flood Risk**: [Visit Data Source](https://www.bts.gov/ctp)
 
 - **Human Resources**:
