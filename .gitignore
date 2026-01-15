@@ -3,4 +3,10 @@ reference/
 data/
 document/
 images/
+.DS_Store
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd

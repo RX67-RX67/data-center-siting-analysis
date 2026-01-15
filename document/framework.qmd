@@ -70,18 +70,24 @@ The timing is also contextually relevant: since late 2022, the launch of ChatGPT
 
 - **Extreme Temperature Frequency**: [Visit Data Source](https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/county/mapping/110/hdd/202312/12/value) [Visit Data Source](https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/county/mapping/110/cdd/202312/12/value)
 - **Earthquake Frequency**: [Visit Data Source](https://resilience.climate.gov/datasets/FEMA::national-risk-index-counties/about)
-- **Storm and Flood Risk**: [Visit Data Source](https://www.bts.gov/ctp)
 
 - **Human Resources**:
 
-- **Bachelor or Higher Rate**: [Visit Data Source](https://www.bts.gov/ctp)
-- **STEM Occupation Share**: [Visit Data Source](https://www.bts.gov/ctp)
+- **Bachelor or Higher Rate**: [Visit Data Source](https://data.census.gov/table/ACSDT1Y2024.C15003?q=county+level+eduacation+data)
 
 - **Policy Support**:
 
-- **Data Center Tax Incentives**: A feature that indicates whether a county offers tax incentives for data centers. This feature is a binary categorical feature. It will be constructed by being compared to a list. The list is a list of cities and areas that are concluded from governmental policy files. If a city(a data point) is mentioned in the policy, it will be assigned a value of 1. Otherwise, it will be assigned with value 0.
-- **AI Industry Policy**: A feature that indicates whether a county has policies related to the AI industry. This feature is a binary categorical feature. It will be constructed by being compared to a list. The list is a list of cities and areas that are concluded from governmental policy files. If a city(a data point) is mentioned in the policy, it will be assigned a value of 1. Otherwise, it will be assigned with value 0.
+**AI-Related Policy Support**: A binary categorical feature indicating whether a county is mentioned in government policies related to AI development. Counties mentioned in such policies will be assigned a value of 1; otherwise, they will be assigned a value of 0.
 
+This is a pretty hard feature to construct, to make it easier, I will simplify it by assigning the value based on if a state is mentioned in the policies. If a state is mentioned in the policies, all counties in that state will be assigned a value of 1; otherwise, they will be assigned a value of 0.
+
+- **Current Data Centers held county**: [Visit Data Source](https://www.pewresearch.org/short-reads/2025/10/24/what-we-know-about-energy-use-at-us-data-centers-amid-the-ai-boom/#how-many-data-centers-are-in-the-u-s-and-where-are-they)
+
+https://epoch.ai/data/data-centers#related-work
+
+Data were collected from publicly accessible pages on datacentermap.com
+in accordance with the website’s robots.txt.
+No restricted API endpoints or authentication-protected resources were accessed.
 
 # Part III: References
 
