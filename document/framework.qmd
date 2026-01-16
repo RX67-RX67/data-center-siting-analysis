@@ -81,11 +81,13 @@ The timing is also contextually relevant: since late 2022, the launch of ChatGPT
 
 This is a pretty hard feature to construct, to make it easier, I will simplify it by assigning the value based on if a state is mentioned in the policies. If a state is mentioned in the policies, all counties in that state will be assigned a value of 1; otherwise, they will be assigned a value of 0.
 
+This data is collected using AI agents. Basically, build use api from openai, then use the api and customized prompt to collect the data. In the whole process, i asked the agent to collect the data in a structured way, which shows a clear evidence path.
+
 - **Current Data Centers held county**: [Visit Data Source](https://www.pewresearch.org/short-reads/2025/10/24/what-we-know-about-energy-use-at-us-data-centers-amid-the-ai-boom/#how-many-data-centers-are-in-the-u-s-and-where-are-they)
 
 https://epoch.ai/data/data-centers#related-work
 
-Data were collected from publicly accessible pages on datacentermap.com
+Data were collected from publicly accessible pages on datacentermap.com using web scraping techniques.
 in accordance with the website’s robots.txt.
 No restricted API endpoints or authentication-protected resources were accessed.
 

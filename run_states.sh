@@ -2,9 +2,9 @@
 set -euo pipefail
 
 STATES=(
-  alabama
-  alaska
-  arizona
+  # alabama
+  # alaska
+  # arizona
   arkansas
   california
   colorado
@@ -60,7 +60,7 @@ for state in "${STATES[@]}"; do
   echo "Running state: $state"
   echo "================================================"
 
-  python scripts/pipeline.py \
+  python scripts/pipeline_get_datacenter.py \
     --states "$state" \
     --output "data/processed_data/datacenters_${state}.csv"
 
