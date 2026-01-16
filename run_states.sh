@@ -5,9 +5,9 @@ STATES=(
   # alabama
   # alaska
   # arizona
-  arkansas
-  california
-  colorado
+  # arkansas
+  # california
+  # colorado
   connecticut
   delaware
   district-of-columbia

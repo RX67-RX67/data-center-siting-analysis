@@ -83,6 +83,8 @@ This is a pretty hard feature to construct, to make it easier, I will simplify i
 
 This data is collected using AI agents. Basically, build use api from openai, then use the api and customized prompt to collect the data. In the whole process, i asked the agent to collect the data in a structured way, which shows a clear evidence path.
 
+The project first used Bing api to search the policies related to AI development, then used the snippet from the search results to construct the policy support feature. then use llm api like chatgpt to extract structured data.
+
 - **Current Data Centers held county**: [Visit Data Source](https://www.pewresearch.org/short-reads/2025/10/24/what-we-know-about-energy-use-at-us-data-centers-amid-the-ai-boom/#how-many-data-centers-are-in-the-u-s-and-where-are-they)
 
 https://epoch.ai/data/data-centers#related-work
