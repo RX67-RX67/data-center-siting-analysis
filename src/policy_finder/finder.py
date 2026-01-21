@@ -9,15 +9,20 @@ load_dotenv()
 
 # environment variables
 API_KEY = os.getenv("SERPAPI_KEY")
+TOKEN = r"(?:St\.|[A-Z][a-z]+)"
 COUNTY_RE = re.compile(
-    r"""\b(
-        (?:New|North|South|East|West|Upper|Lower)?\s*
-        [A-Z][a-z]+
-        (?:[-'\s][A-Z][a-z]+|[-'\s](?:San|Santa|Los|St\.|De|Del|La|Le|Du|Van|Von))*
+    rf"""\b(
+        (?:(?:New|North|South|East|West|Upper|Lower)\s+)?   # optional prefix
+        {TOKEN}                                            # first token
+        (?:                                                # following tokens
+            (?:[-'\s]{TOKEN})                              # token joined by space/hyphen/apostrophe
+          | (?:\s(?:San|Santa|Los|De|Del|La|Le|Du|Van|Von)) # particles
+        )*
         \sCounty
     )\b""",
     re.VERBOSE
 )
+
 
 # function to search policies
 def search_policies(query, topk=10):
@@ -74,3 +79,4 @@ def count_counties(rows):
 def save_to_csv(rows, path="county_candidates.csv"):
     df = pd.DataFrame(rows)
     df.to_csv(path, index=False)
+

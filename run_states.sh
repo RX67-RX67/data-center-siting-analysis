@@ -8,11 +8,11 @@ STATES=(
   # arkansas
   # california
   # colorado
-  connecticut
-  delaware
-  district-of-columbia
-  florida
-  georgia
+  # connecticut
+  # delaware
+  # district-of-columbia
+  # florida
+  # georgia
   hawaii
   idaho
   illinois

@@ -113,7 +113,10 @@ def main():
 
     # --------- 2) Run pipeline ----------
     all_items = []
-    for q in queries:
+    for i, q in enumerate(queries):
+
+        print(f"Searching for query {i+1} of {len(queries)}: {q}")
+
         results = fd.search_policies(q, args.topk)
         items = fd.extract_organic_results(results)
 
@@ -127,15 +130,20 @@ def main():
         time.sleep(args.sleep + random.random() * args.jitter)
 
     # --------- 3) Deduplicate ----------
+    print(f"Deduplicating {len(all_items)} items")
     unique_items = dedup_items_by_url(all_items)
 
     # --------- 4) Extract counties (evidence rows) ----------
+    print(f"Extracting counties from {len(unique_items)} items")
     rows = fd.build_county_candidates(unique_items)
 
     # --------- 5) County frequency ----------
+    print(f"Counting counties from {len(rows)} rows")
     counts = fd.count_counties(rows)
 
     # --------- 6) Save outputs ----------
+    print(f"Saving {len(rows)} rows to {args.output}")
+    print(f"Saving {len(counts)} counties to {args.output_counts}")
     fd.save_to_csv(rows, args.output)
     write_counts_csv(counts, args.output_counts)
 
