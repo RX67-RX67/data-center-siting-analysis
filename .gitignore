@@ -3,6 +3,8 @@ reference/
 data/
 document/
 images/
+
+# macOS
 .DS_Store
 
 # Python
