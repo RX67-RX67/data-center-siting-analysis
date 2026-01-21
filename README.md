@@ -16,6 +16,10 @@ This is a personal research-oriented project that aligns with the author’s aca
 
 ## Reference
 
-- Kearney. (2025). *AI Data Center Location Attractiveness Index*. [Visit Website](https://www.kearney.com/industry/technology/article/ai-data-center-location-attractiveness-index)
+- Kearney. (2025). [*AI Data Center Location Attractiveness Index*](https://www.kearney.com/industry/technology/article/ai-data-center-location-attractiveness-index)
 
-- IBM. (2025). *What is an AI Data Center*. [Visit Website](https://www.ibm.com/think/topics/ai-data-center)
+- IBM. (2025). [*What is an AI Data Center*](https://www.ibm.com/think/topics/ai-data-center)
+
+- Epoch AI, ‘Frontier Data Centers’. Published online at epoch.ai. Retrieved from ‘https://epoch.ai/data/data-centers’ [online resource]. Accessed 21 Jan 2026.
+
+

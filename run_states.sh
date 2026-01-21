@@ -13,8 +13,8 @@ STATES=(
   # district-of-columbia
   # florida
   # georgia
-  hawaii
-  idaho
+  # hawaii
+  # idaho
   illinois
   indiana
   iowa
