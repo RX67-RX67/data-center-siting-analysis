@@ -15,7 +15,7 @@ STATES=(
   # georgia
   # hawaii
   # idaho
-  illinois
+  # illinois
   indiana
   iowa
   kansas
