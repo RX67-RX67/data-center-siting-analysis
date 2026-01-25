@@ -18,7 +18,7 @@ STATES=(
   # illinois
   # indiana
   # iowa
-  kansas
+  # kansas
   kentucky
   louisiana
   maine
