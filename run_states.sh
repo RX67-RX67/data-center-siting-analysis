@@ -20,7 +20,7 @@ STATES=(
   # iowa
   # kansas
   # kentucky
-  louisiana
+  # louisiana
   maine
   maryland
   massachusetts
