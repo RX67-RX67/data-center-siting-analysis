@@ -22,8 +22,8 @@ STATES=(
   # kentucky
   # louisiana
   # maine
-  maryland
-  massachusetts
+  # maryland
+  # massachusetts
   michigan
   minnesota
   mississippi
