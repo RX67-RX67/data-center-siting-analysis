@@ -24,7 +24,7 @@ STATES=(
   # maine
   # maryland
   # massachusetts
-  michigan
+  # michigan
   minnesota
   mississippi
   missouri
