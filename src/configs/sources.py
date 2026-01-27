@@ -52,5 +52,31 @@ SOURCES = {
                 )
             }
         }
+    },
+    "environment_risk":{
+        "path":"data/raw_data/environmental_risk/National_Risk_Index_Counties_807384124455672111.csv",
+        "format":"csv",
+        "keys":{
+            "state": "State Name",
+            "county": "County Name",
+        },
+        "value_columns":{
+            "community_resilience_value":"Community Resilience - Value",
+            "community_risk_factor_value":"Community Risk Factor - Value",
+            "cold_wave_risk_index_value":"Cold Wave - Hazard Type Risk Index Value",
+            "drought_risk_index_value":"Drought - Hazard Type Risk Index Value",
+            "earthquake_risk_index_value":"Earthquake - Hazard Type Risk Index Value",
+            "hail_risk_index_value":"Hail - Hazard Type Risk Index Value",
+            "heat_wave_risk_index_value":"Heat Wave - Hazard Type Risk Index Value",
+            "hurricane_risk_index_value":"Hurricane - Hazard Type Risk Index Value",
+            "ice_storm_risk_index_value":"Ice Storm - Hazard Type Risk Index Value",
+            "landslide_risk_index_value":"Landslide - Hazard Type Risk Index Value",
+            "lightning_risk_index_value":"Lightning - Hazard Type Risk Index Value",
+            "riverine_flooding_risk_index_value":"Riverine Flooding - Hazard Type Risk Index Value",
+            "strong_wind_risk_index_value":"Strong Wind - Hazard Type Risk Index Value",
+            "tornado_risk_index_value":"Tornado - Hazard Type Risk Index Value",
+            "wildfire_risk_index_value":"Wildfire - Hazard Type Risk Index Value",
+            "winter_weather_risk_index_value":"Winter Weather - Hazard Type Risk Index Value"
+        }
     }
 }
