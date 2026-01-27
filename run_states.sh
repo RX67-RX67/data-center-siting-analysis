@@ -25,7 +25,7 @@ STATES=(
   # maryland
   # massachusetts
   # michigan
-  minnesota
+  # minnesota
   mississippi
   missouri
   montana
