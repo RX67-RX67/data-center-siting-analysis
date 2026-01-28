@@ -26,8 +26,8 @@ STATES=(
   # massachusetts
   # michigan
   # minnesota
-  mississippi
-  missouri
+  # mississippi
+  # missouri
   montana
   nebraska
   nevada
