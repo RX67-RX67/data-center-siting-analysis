@@ -1,11 +1,13 @@
-SOURCES = {
+SOURCES_COUNTY = {
     "transportation": {
         "path":"data/raw_data/transportation_2024/Table.csv",
         "format":"csv",
+        # common keys for tables merging
         "keys":{
             "state": "State",
             "county": "County Name",
         },
+        # value columns for the table(with name transform)
         "value_columns":{
             "primary_large_airport_count":"Large Primary Airports",
             "primary_medium_airport_count":"Medium Primary Airports",
@@ -22,6 +24,7 @@ SOURCES = {
             "infra_fair_count":"Fair",
             "infra_poor_count":"Poor"
         },
+        # proxies to be built based on the value columns
         "proxies":{
             "air_connectivity": {
                 "comment": (
@@ -78,5 +81,60 @@ SOURCES = {
             "wildfire_risk_index_value":"Wildfire - Hazard Type Risk Index Value",
             "winter_weather_risk_index_value":"Winter Weather - Hazard Type Risk Index Value"
         }
+    },
+    "land_price": {
+        "path": "data/raw_data/land_price_2023/AEI_adjusted-Land-Data-2023.xlsx",
+        "format": "xlsx",
+        "sheet": "Census Tract",
+        "keys": {
+            "state": "State",
+            "county": "County",
+        },
+        # indicate if common keys need to be normalized
+        "normalize":{
+            "county":{
+                "method": "remove anything after the county name including the word 'county'",
+            }
+        },
+        # filter for the table
+        "filter":{
+            "Year": 2023,
+        },
+        "aggregation": {
+            "method": "median",
+            "groupby": ["state", "county"],
+            "value_columns": {
+                "land_value_1_4_acre_standardized": "Land Value (1/4 Acre Lot, Standardized)"
+            }
+        }
+    },
+    "labor_price": {
+        "path": "data/raw_data/labor_cost_2023/allhlcn23.xlsx",
+        "format":"xlsx",
+        "sheet": "US_St_CN_MSA",
+        "keys": {
+            "state": "St Name",
+            "county": "Area",
+        },
+        "normalize":{
+            "county":{
+                "method": "remove anything after the county name including the word 'county'",
+            }
+        },
+        "filter":{
+            "Area Type": "County",
+            "Onwership": "Private",
+            "Industry":["1021 Trade, transportation, and utilities", "1022 Information", "1024 Professional and business services"]
+        },
+        "pivot": {
+            "index": ["St Name", "Area"],
+            "columns": "Industry",
+            "values": "Annual Average Weekly Wage",
+            "rename": {
+            "1021 Trade, transportation, and utilities": "wage_trade_transport_utilities",
+            "1022 Information": "wage_information",
+            "1024 Professional and business services": "wage_prof_business"
+            }
+        } 
     }
 }
