@@ -1,7 +1,8 @@
 SOURCES_REFERENCE = {
-    "zip_to_fips":{
+    "zip_to_fips": {
         "path": "data/raw_data/zip_county_transformation/ZIP_COUNTY_092025.xlsx",
         "format": "xlsx",
+        "vintage": 2025,  # September 2025
         "sheet": "Export Worksheet",
         "keys": {
             "county_fips":"COUNTY",
@@ -18,6 +19,7 @@ SOURCES_REFERENCE = {
     "fips_to_county": {
         "path": "data/raw_data/zip_county_transformation/all-geocodes-v2024.xlsx",
         "format": "xlsx",
+        "vintage": 2024,
         "sheet": "all_geocodes_v2024",
         "skiprows": 4,  
         "filters": {
