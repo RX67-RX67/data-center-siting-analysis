@@ -11,7 +11,6 @@ import pandas as pd
 
 from src.configs.sources import SOURCES
 
-
 def _resolve_path(path_str: str, base_path: Path | None) -> Path:
     p = Path(path_str)
     if not p.is_absolute() and base_path is not None:
@@ -71,7 +70,10 @@ def _apply_post_filters(df: pd.DataFrame, post_filters: dict) -> pd.DataFrame:
     for key, value in post_filters.items():
         if key.endswith("_not_ending_with"):
             col = key.replace("_not_ending_with", "")
-            df = df[~df[col].astype(str).str.endswith(str(value))]
+            ser = df[col]
+            if isinstance(ser, pd.DataFrame):
+                ser = ser.iloc[:, 0]
+            df = df[~ser.astype(str).str.endswith(str(value))]
         else:
             raise ValueError(f"Unknown post_filter: {key}")
     return df
@@ -208,6 +210,11 @@ def read(table_name: str, base_path: Path | None = None) -> pd.DataFrame:
     # Combine columns (e.g. FIPS)
     if "combine_columns" in spec:
         df = _apply_combine_columns(df, spec["combine_columns"])
+        # Drop source columns so rename does not create duplicate output names
+        for out_col, combine_spec in spec["combine_columns"].items():
+            for c in combine_spec.get("from", []):
+                if c in df.columns:
+                    df = df.drop(columns=[c])
 
     # Normalize (before rename, uses raw col names via keys)
     if "normalize" in spec:
