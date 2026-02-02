@@ -28,13 +28,13 @@ STATES=(
   # minnesota
   # mississippi
   # missouri
-  montana
-  nebraska
-  nevada
-  new-hampshire
-  new-jersey
-  new-mexico
-  new-york
+  # montana
+  # nebraska
+  # nevada
+  # new-hampshire
+  # new-jersey
+  # new-mexico
+  # new-york
   north-carolina
   north-dakota
   ohio
