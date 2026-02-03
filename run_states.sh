@@ -35,8 +35,8 @@ STATES=(
   # new-jersey
   # new-mexico
   # new-york
-  north-carolina
-  north-dakota
+  # north-carolina
+  # north-dakota
   ohio
   oklahoma
   oregon
