@@ -22,6 +22,18 @@ def _resolve_path(path_str: str, base_path: Path) -> Path:
     return base_path / p if not p.is_absolute() else p
 
 
+def _parse_read_dtypes(read_dtypes: dict) -> dict:
+    """Convert schema dtype names to types usable by read_excel/read_csv."""
+    type_map = {"string": str, "str": str, "float64": float, "float": float, "int64": int, "int": int}
+    out = {}
+    for col, dtype in read_dtypes.items():
+        if isinstance(dtype, type):
+            out[col] = dtype
+        else:
+            out[col] = type_map.get(dtype, dtype)
+    return out
+
+
 def _read_table(name: str, base_path: Path) -> pd.DataFrame:
     """Load a single table from SOURCES_REFERENCE into a DataFrame."""
     if name not in SOURCES_REFERENCE:
@@ -32,15 +44,21 @@ def _read_table(name: str, base_path: Path) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"Data not found: {path}")
 
+    # Build read kwargs; apply read_dtypes at read time so no later step alters values
     if spec.get("format", "xlsx").lower() == "xlsx":
         read_kw = {"engine": "openpyxl"}
         if "sheet" in spec:
             read_kw["sheet_name"] = spec["sheet"]
         if "skiprows" in spec:
             read_kw["skiprows"] = spec["skiprows"]
+        if "read_dtypes" in spec:
+            read_kw["dtype"] = _parse_read_dtypes(spec["read_dtypes"])
         df = pd.read_excel(path, **read_kw)
     else:
-        df = pd.read_csv(path)
+        read_kw = {}
+        if "read_dtypes" in spec:
+            read_kw["dtype"] = _parse_read_dtypes(spec["read_dtypes"])
+        df = pd.read_csv(path, **read_kw)
     logger.info(f"Read {name}: {len(df)} rows from {path.name}")
     if _verbose:
         print(f"\n--- {name} (after read) ---\n{df.head()}\n")
@@ -82,6 +100,26 @@ def _read_table(name: str, base_path: Path) -> pd.DataFrame:
     df = df.rename(columns=rename)
     keep = [c for c in list(keys.keys()) + list(value_columns.keys()) if c in df.columns]
     df = df[keep].copy()
+
+    # Apply schema dtypes for consistent joins (string, float64, etc.)
+    # Use pandas StringDtype ("string") so dtypes display as string, not object
+    if "dtypes" in spec:
+        for col, dtype in spec["dtypes"].items():
+            if col not in df.columns:
+                continue
+            if dtype in ("string", "str"):
+                df[col] = df[col].astype(str).str.strip()
+            elif isinstance(dtype, str) and dtype.startswith("float"):
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+            else:
+                try:
+                    df[col] = df[col].astype(dtype)
+                except (TypeError, ValueError):
+                    pass
+        logger.info(f"Applied dtypes: {list(spec['dtypes'].keys())}")
+        if _verbose:
+            print(f"\n--- {name} (after dtypes) ---\n{df.dtypes}\n")
+
     logger.info(f"After rename/keep: {len(df)} rows, columns: {list(df.columns)}")
     if _verbose:
         print(f"\n--- {name} (after rename/keep) ---\n{df.head()}\n")
@@ -113,9 +151,11 @@ def build_reference_table(base_path: Path) -> pd.DataFrame:
     if _verbose:
         print(f"\n--- fips_to_county (final) ---\n{fips_county.head()}\n")
 
-    zip_fips["county_fips"] = zip_fips["county_fips"].astype(str).str.zfill(5)
-    fips_county["county_fips"] = fips_county["county_fips"].astype(str).str.zfill(5)
-    ref = zip_fips.merge(fips_county, on="county_fips", how="left")
+    # Normalize join keys to 5-digit string for reliable merges
+    zip_fips["county_fips"] = zip_fips["county_fips"].astype(str).str.strip().str.zfill(5)
+    zip_fips["zip_code"] = zip_fips["zip_code"].astype(str).str.strip().str.zfill(5)
+    fips_county["county_fips"] = fips_county["county_fips"].astype(str).str.strip().str.zfill(5)
+    ref = zip_fips.merge(fips_county, on="county_fips", how="outer")
     logger.info(f"Reference table (after join): {len(ref)} rows, columns: {list(ref.columns)}")
     if _verbose:
         print(f"\n--- reference_table (after join) ---\n{ref.head()}\n")
