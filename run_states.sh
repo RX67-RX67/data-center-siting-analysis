@@ -37,10 +37,10 @@ STATES=(
   # new-york
   # north-carolina
   # north-dakota
-  ohio
-  oklahoma
-  oregon
-  pennsylvania
+  # ohio
+  # oklahoma
+  # oregon
+  # pennsylvania
   rhode-island
   south-carolina
   south-dakota

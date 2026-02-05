@@ -10,6 +10,7 @@ sys.path.insert(0, str(project_root))
 from src.configs.sources_county_fips import SOURCES_COUNTY_FIPS
 from src.configs.sources_county import SOURCES_COUNTY
 from src.configs.sources_zip import SOURCES_ZIP
+from src.configs.sources_reference import SOURCES_REFERENCE
 from src.raw_table_inspector.inspector import parse_config, inspect_dtypes
 
 def inspect_all_sources(sources: dict, base_path: Path | None = None) -> dict:
@@ -69,7 +70,7 @@ def main():
     )
     parser.add_argument(
         "--which",
-        choices=["county_fips", "county", "zip", "all"],
+        choices=["county_fips", "county", "zip", "reference", "all"],
         default="all",
         help="Which source dictionary to inspect.",
     )
@@ -97,6 +98,8 @@ def main():
         selected.append(("county", SOURCES_COUNTY))
     if args.which in ("zip", "all"):
         selected.append(("zip", SOURCES_ZIP))
+    if args.which in ("reference", "all"):
+        selected.append(("reference", SOURCES_REFERENCE))
 
     # Merge sources with namespace prefixes to avoid name collisions
     merged_sources = {}
