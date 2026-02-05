@@ -3,13 +3,30 @@ SOURCES_COUNTY = {
         "path": "data/raw_data/transportation_2024/Table.csv",
         "format": "csv",
         "vintage": 2024,
-        # common keys for tables merging
-        "keys":{
+        "read_dtypes": {
+            "State": "string",
+            "County Name": "string",
+            # Features used in downstream computations / proxies
+            "Large Primary Airports": "float64",
+            "Medium Primary Airport": "float64",
+            "Small Primary Airport": "float64",
+            "Non-Hub Primary Airport": "float64",
+            "National Non-Primary Airport": "float64",
+            "Regional Non-Primary Airport": "float64",
+            "Local Non-Primary Airport": "float64",
+            "Basic Non-Primary Airport": "float64",
+            "Unclassified Non-Primary Airport": "float64",
+            "All Rail Track": "float64",
+            "Docks": "float64",
+            "Good": "float64",
+            "Fair": "float64",
+            "Poor": "float64",
+        },
+        "keys": {
             "state": "State",
             "county": "County Name",
         },
-        # value columns for the table(with name transform)
-        "value_columns":{
+        "value_columns": {
             "primary_large_airport_count":"Large Primary Airports",
             "primary_medium_airport_count":"Medium Primary Airports",
             "primary_small_airport_count":"Small Primary Airports",
@@ -55,25 +72,66 @@ SOURCES_COUNTY = {
                     "Zeros are treated as structural zeros (e.g., landlocked counties), not missing data."
                 )
             }
-        }
+        },
+        "dtypes": {
+            "state": "string",
+            "county": "string",
+            # Value columns used in proxy computations
+            "primary_large_airport_count": "float64",
+            "primary_medium_airport_count": "float64",
+            "primary_small_airport_count": "float64",
+            "non_hub_primary_airport_count": "float64",
+            "national_non_primary_airport_count": "float64",
+            "regional_non_primary_airport_count": "float64",
+            "local_non_primary_airport_count": "float64",
+            "basic_non_primary_airport_count": "float64",
+            "unclassified_non_primary_airport_count": "float64",
+            "rail_track_count": "float64",
+            "docks_count": "float64",
+            "infra_good_count": "float64",
+            "infra_fair_count": "float64",
+            "infra_poor_count": "float64",
+        },
     },
     "environment_risk": {
         "path": "data/raw_data/environmental_risk/National_Risk_Index_Counties_807384124455672111.csv",
         "format": "csv",
         "vintage": 2025,
-        "keys":{
+        "read_dtypes": {
+            "State Name": "string",
+            "County Name": "string",
+            "County Type": "string",
+            # Features used in downstream computations / proxies
+            "Community Resilience - Value": "float64",
+            "Community Risk Factor - Value": "float64",
+            "Cold Wave - Hazard Type Risk Index Value": "float64",
+            "Drought - Hazard Type Risk Index Value": "float64",
+            "Earthquake - Hazard Type Risk Index Value": "float64",
+            "Hail - Hazard Type Risk Index Value": "float64",
+            "Heat Wave - Hazard Type Risk Index Value": "float64",
+            "Hurricane - Hazard Type Risk Index Value": "float64",
+            "Ice Storm - Hazard Type Risk Index Value": "float64",
+            "Landslide - Hazard Type Risk Index Value": "float64",
+            "Lightning - Hazard Type Risk Index Value": "float64",
+            "Riverine Flooding - Hazard Type Risk Index Value": "float64",
+            "Strong Wind - Hazard Type Risk Index Value": "float64",
+            "Tornado - Hazard Type Risk Index Value": "float64",
+            "Wildfire - Hazard Type Risk Index Value": "float64",
+            "Winter Weather - Hazard Type Risk Index Value": "float64",
+        },
+        "keys": {
             "state": "State Name",
             "county": "county_name",
         },
-         "combine_columns": {
+        "combine_columns": {
             "county_name": {
                 "from": ["County Name", "County Type"],
                 "method": "concat",
                 "separator": " ",
-                "dtype": "string"
+                "dtype": "string",
             }
         },
-        "value_columns":{
+        "value_columns": {
             "community_resilience_value":"Community Resilience - Value",
             "community_risk_factor_value":"Community Risk Factor - Value",
             "cold_wave_risk_index_value":"Cold Wave - Hazard Type Risk Index Value",
@@ -89,37 +147,74 @@ SOURCES_COUNTY = {
             "strong_wind_risk_index_value":"Strong Wind - Hazard Type Risk Index Value",
             "tornado_risk_index_value":"Tornado - Hazard Type Risk Index Value",
             "wildfire_risk_index_value":"Wildfire - Hazard Type Risk Index Value",
-            "winter_weather_risk_index_value":"Winter Weather - Hazard Type Risk Index Value"
-        }
+            "winter_weather_risk_index_value": "Winter Weather - Hazard Type Risk Index Value",
+        },
+        "dtypes": {
+            "state": "string",
+            "county": "string",  # constructed from County Name + County Type
+            # Value columns used in downstream computations
+            "community_resilience_value": "float64",
+            "community_risk_factor_value": "float64",
+            "cold_wave_risk_index_value": "float64",
+            "drought_risk_index_value": "float64",
+            "earthquake_risk_index_value": "float64",
+            "hail_risk_index_value": "float64",
+            "heat_wave_risk_index_value": "float64",
+            "hurricane_risk_index_value": "float64",
+            "ice_storm_risk_index_value": "float64",
+            "landslide_risk_index_value": "float64",
+            "lightning_risk_index_value": "float64",
+            "riverine_flooding_risk_index_value": "float64",
+            "strong_wind_risk_index_value": "float64",
+            "tornado_risk_index_value": "float64",
+            "wildfire_risk_index_value": "float64",
+            "winter_weather_risk_index_value": "float64",
+        },
     },
     "labor_price": {
         "path": "data/raw_data/labor_cost_2023/allhlcn23.xlsx",
         "format": "xlsx",
         "vintage": 2023,
         "sheet": "US_St_Cn_MSA",
+        "read_dtypes": {
+            "St Name": "string",
+            "Area": "string",
+            "Area Type": "string",
+            "Ownership": "string",
+            "Industry": "string",
+            # Feature used as the wage value for pivot / aggregations
+            "Annual Average Weekly Wage": "float64",
+        },
         "keys": {
             "state": "St Name",
             "county": "Area",
         },
-        "normalize":{
-            "county":{
-                "method": "remove anything after the county name including the word 'county'",
+        "normalize": {
+            "county": {
+                "method": "remove anything after the word 'County'",
             }
         },
-        "filter":{
+        "filter": {
             "Area Type": "County",
             "Ownership": "Private",
-            "Industry":["1021 Trade, transportation, and utilities", "1022 Information", "1024 Professional and business services"]
+            "Industry": ["1021 Trade, transportation, and utilities", "1022 Information", "1024 Professional and business services"],
         },
         "pivot": {
             "index": ["St Name", "Area"],
             "columns": "Industry",
             "values": "Annual Average Weekly Wage",
             "rename": {
-            "1021 Trade, transportation, and utilities": "wage_trade_transport_utilities",
-            "1022 Information": "wage_information",
-            "1024 Professional and business services": "wage_prof_business"
+                "1021 Trade, transportation, and utilities": "wage_trade_transport_utilities",
+                "1022 Information": "wage_information",
+                "1024 Professional and business services": "wage_prof_business",
             }
-        } 
-    }
+        },
+        "dtypes": {
+            "state": "string",
+            "county": "string",
+            "wage_trade_transport_utilities": "float64",
+            "wage_information": "float64",
+            "wage_prof_business": "float64",
+        },
+    },
 }
