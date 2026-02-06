@@ -5,6 +5,20 @@ SOURCES_COUNTY_FIPS = {
         "vintage": 2023,  # USEER 2023 report (covers 2022 employment data)
         "sheet": "Sheet1",
         "skiprows": 6,  # Header row is row 7 (0-indexed: 6)
+        "read_dtypes": {
+            "County FIPS": "int64",
+            "State": "string",
+            "County Name": "string",
+            # Features used in downstream computations / proxies
+            "Solar": "string",  # Contains "<10" special values, will be processed
+            "Wind": "string",
+            "Hydroelectric": "string",
+            "Natural Gas": "string",
+            "Traditional TDS": "string",
+            "Storage": "string",
+            "Smart Grid": "string",
+            "Micro Grid": "string",
+        },
         "keys": {
             "county_fips": "County FIPS",
         },
@@ -48,11 +62,35 @@ SOURCES_COUNTY_FIPS = {
                 "columns": ["tds_traditional", "tds_storage", "tds_smart_grid", "tds_micro_grid"],
             },
         },
+        "dtypes": {
+            "county_fips": "string",
+            "state": "string",
+            "county": "string",
+            # Value columns used in proxy computations
+            "epg_solar": "float64",
+            "epg_wind": "float64",
+            "epg_hydroelectric": "float64",
+            "epg_natural_gas": "float64",
+            "tds_traditional": "float64",
+            "tds_storage": "float64",
+            "tds_smart_grid": "float64",
+            "tds_micro_grid": "float64",
+        },
     },
     "high_speed_internet": {
         "path": "data/raw_data/Internet_2025/bdc_us_fixed_broadband_summary_by_geography_D23_01may2025 2.csv",
         "format": "csv",
         "vintage": 2023,  # D23 = December 2023 data collection, released May 2025
+        "read_dtypes": {
+            "geography_id": "string",
+            # Features used in filtering
+            "geography_type": "string",
+            "biz_res": "string",
+            "technology": "string",
+            # Features used in pivot / aggregations
+            "speed_100_20": "float64",
+            "speed_1000_100": "float64",
+        },
         "filter": {
             "geography_type": "County",
             "biz_res": "B",  # Business broadband (data centers are business locations)
@@ -95,12 +133,29 @@ SOURCES_COUNTY_FIPS = {
                 "column": "cable_fiber_1000_100_coverage",
             },
         },
+        "dtypes": {
+            "county_fips": "string",
+            # Value columns from pivot operation
+            "fiber_100_20_coverage": "float64",
+            "fiber_1000_100_coverage": "float64",
+            "cable_fiber_100_20_coverage": "float64",
+            "cable_fiber_1000_100_coverage": "float64",
+            "any_tech_100_20_coverage": "float64",
+            "any_tech_1000_100_coverage": "float64",
+        },
     },
     "land_price": {
         "path": "data/raw_data/land_price_2023/AEI_adjusted-Land-Data-2023.xlsx",
         "format": "xlsx",
         "vintage": 2023,
         "sheet": "County",
+        "read_dtypes": {
+            "County Code": "int64",
+            # Feature used in filtering
+            "Year": "int64",
+            # Feature used in downstream computations
+            "Land Value (1/4 Acre Lot, Standardized)": "float64",
+        },
         "keys": {
             "county_fips": "County Code",
         },
@@ -110,6 +165,10 @@ SOURCES_COUNTY_FIPS = {
         },
         "value_columns": {
             "land_value_1_4_acre_standardized": "Land Value (1/4 Acre Lot, Standardized)"
-        }
+        },
+        "dtypes": {
+            "county_fips": "string",
+            "land_value_1_4_acre_standardized": "float64",
+        },
     }
 }
