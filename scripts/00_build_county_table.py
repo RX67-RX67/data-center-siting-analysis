@@ -18,6 +18,20 @@ logger = logging.getLogger(__name__)
 _verbose = True
 
 
+def _print_missing_counts(df: pd.DataFrame, table_name: str) -> None:
+    """Print missing value count per column for the input table (when not quiet)."""
+    if not _verbose:
+        return
+    n = len(df)
+    missing = df.isna().sum()
+    lines = [f"Missing values in input table '{table_name}' (n={n} rows):"]
+    for col in df.columns:
+        cnt = int(missing[col])
+        pct = (100.0 * cnt / n) if n else 0.0
+        lines.append(f"  {col}: {cnt} ({pct:.2f}%)")
+    print("\n" + "\n".join(lines) + "\n")
+
+
 def _resolve_path(path_str: str, base_path: Path) -> Path:
     p = Path(path_str)
     return base_path / p if not p.is_absolute() else p
@@ -280,6 +294,7 @@ def build_county_table(base_path: Path, table_names: list[str] | None = None) ->
     dfs = []
     for name in names:
         df = _read_table(name, base_path)
+        _print_missing_counts(df, name)
         for k in ("state", "county"):
             if k in df.columns:
                 df[k] = df[k].astype(str).str.strip().astype("string")
@@ -309,7 +324,7 @@ def main():
     parser.add_argument(
         "--output",
         type=str,
-        default="data/processed_data/county_table.csv",
+        default="data/processed_data/data_build/county_table.csv",
         help="Output CSV path",
     )
     parser.add_argument(

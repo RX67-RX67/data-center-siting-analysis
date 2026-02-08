@@ -1,13 +1,13 @@
 """
-Pipeline: Build county-grain table from ZIP-grain table using reference table.
+Pipeline: Build county-grain table of allocated data center counts from ZIP-grain table.
 
-Joins zip_table and reference_table on zip_code (outer). Allocates commercial_price
-and industrial_price to counties by business_ratio with division by weight sum:
-  county_price = sum(price * business_ratio) / sum(business_ratio)
-where weight is counted only when the ZIP has a non-missing price.
-Writes county_from_zip_table.csv under data/processed_data/data_build/ by default.
+Joins zip_table_num_dc and reference_table on zip_code (outer). Allocates num_datacenters
+to counties by business_ratio and sums by county:
+  county_num_datacenters = sum(num_datacenters × business_ratio)
+Result may be fractional (expected count under uncertain spatial assignment).
+Writes county_from_zip_table_num_dc.csv under data/processed_data/data_build/ by default.
 
-See document/plan_zip_to_county_electricity_price.md for the transformation logic.
+See document/plan_zip_to_county_num_dc.md for the transformation logic.
 """
 
 import argparse
@@ -26,17 +26,17 @@ logger = logging.getLogger(__name__)
 _verbose = True
 
 # Default paths (relative to project root)
-ZIP_TABLE_PATH = "data/processed_data/data_build/zip_table.csv"
+ZIP_TABLE_PATH = "data/processed_data/data_build/zip_table_num_dc.csv"
 REFERENCE_TABLE_PATH = "data/processed_data/data_build/reference_table.csv"
-DEFAULT_OUTPUT_PATH = "data/processed_data/data_build/county_from_zip_table.csv"
+DEFAULT_OUTPUT_PATH = "data/processed_data/data_build/county_from_zip_table_num_dc.csv"
 
-# Columns to allocate from ZIP to county using business_ratio
-PRICE_COLUMNS = ["commercial_price", "industrial_price"]
+# Column to allocate from ZIP to county using business_ratio
+COUNT_COLUMN = "num_datacenters"
 RATIO_COLUMN = "business_ratio"
 COUNTY_ID_COLUMN = "county_fips"
 
 # Dtype constraints: string columns kept as string on read, during compute, and on output
-STRING_COLUMNS = ["zip_code", "county_fips", "county_name", "state_cap"]
+STRING_COLUMNS = ["zip_code", "county_fips", "county_name", "state"]
 
 
 def _resolve_path(path_str: str, base_path: Path) -> Path:
@@ -71,9 +71,9 @@ def _report_missing_per_feature(df: pd.DataFrame, table_name: str) -> None:
 
 def build_county_from_zip(base_path: Path) -> pd.DataFrame:
     """
-    Load zip_table and reference_table with dtype constraints, join on zip_code (outer),
-    compute weighted numerator and weight_sum (only when ZIP has non-missing price),
-    aggregate by county_fips, then normalize: price = numerator_sum / weight_sum.
+    Load zip_table_num_dc and reference_table with dtype constraints, join on zip_code (outer),
+    compute allocated_count = num_datacenters × business_ratio per row, aggregate by county_fips
+    by summing. Result is county-level expected data center count (may be fractional).
     """
     zip_path = _resolve_path(ZIP_TABLE_PATH, base_path)
     ref_path = _resolve_path(REFERENCE_TABLE_PATH, base_path)
@@ -93,13 +93,12 @@ def build_county_from_zip(base_path: Path) -> pd.DataFrame:
     zip_df = pd.read_csv(zip_path, dtype=zip_dtypes)
     _ensure_string_columns(zip_df, ["zip_code"])
     zip_df["zip_code"] = zip_df["zip_code"].str.strip().str.zfill(5)
-    for col in PRICE_COLUMNS:
-        if col in zip_df.columns:
-            zip_df[col] = pd.to_numeric(zip_df[col], errors="coerce")
+    if COUNT_COLUMN in zip_df.columns:
+        zip_df[COUNT_COLUMN] = pd.to_numeric(zip_df[COUNT_COLUMN], errors="coerce")
     logger.info(f"ZIP table: {len(zip_df)} rows, columns: {list(zip_df.columns)}")
-    _report_missing_per_feature(zip_df, "zip_table")
+    _report_missing_per_feature(zip_df, "zip_table_num_dc")
     if _verbose:
-        print(f"\n--- zip_table (head) ---\n{zip_df.head()}\n")
+        print(f"\n--- zip_table_num_dc (head) ---\n{zip_df.head()}\n")
 
     logger.info(f"Reading reference table: {ref_path.name}")
     ref_df = pd.read_csv(ref_path, dtype=ref_dtypes)
@@ -128,43 +127,22 @@ def build_county_from_zip(base_path: Path) -> pd.DataFrame:
     if _verbose:
         print(f"\n--- merged (head) ---\n{merged.head()}\n")
 
-    # Numeric columns: ensure float
-    for col in PRICE_COLUMNS:
-        if col in merged.columns:
-            merged[col] = pd.to_numeric(merged[col], errors="coerce")
+    # Allocate: allocated_count = num_datacenters × business_ratio (treat missing num_datacenters as 0)
+    merged[COUNT_COLUMN] = pd.to_numeric(merged[COUNT_COLUMN], errors="coerce").fillna(0)
     merged[RATIO_COLUMN] = pd.to_numeric(merged[RATIO_COLUMN], errors="coerce").fillna(0)
+    merged["_allocated"] = merged[COUNT_COLUMN] * merged[RATIO_COLUMN]
 
-    # Per-row: numerator = price * business_ratio; weight = business_ratio only when ZIP has non-missing price
-    has_price = False
-    for col in PRICE_COLUMNS:
-        if col in merged.columns:
-            has_price = has_price | merged[col].notna()
-    if not isinstance(has_price, pd.Series):
-        has_price = pd.Series(False, index=merged.index)
-    merged["_weight"] = merged[RATIO_COLUMN].where(has_price, 0.0)
-
-    for col in PRICE_COLUMNS:
-        if col in merged.columns:
-            merged[f"_num_{col}"] = (merged[col].fillna(0) * merged[RATIO_COLUMN])
-
-    # Aggregate by county: sum numerators and weight
-    num_cols = [f"_num_{c}" for c in PRICE_COLUMNS if c in merged.columns]
-    agg_dict = {c: "sum" for c in ["_weight"] + num_cols}
-    for c in ["county_name", "state_cap"]:
+    # Aggregate by county: sum allocated contributions
+    agg_dict = {"_allocated": "sum"}
+    for c in ["county_name", "state"]:
         if c in merged.columns:
             agg_dict[c] = "first"
 
     out = merged.groupby(COUNTY_ID_COLUMN, as_index=False).agg(agg_dict)
-    # Normalize: county_price = numerator_sum / weight_sum
-    weight_sum = out["_weight"]
-    for col in PRICE_COLUMNS:
-        ncol = f"_num_{col}"
-        if ncol in out.columns:
-            out[col] = out[ncol] / weight_sum.replace(0, pd.NA)
-            out.drop(columns=[ncol], inplace=True)
-    out.drop(columns=["_weight"], inplace=True)
+    out[COUNT_COLUMN] = out["_allocated"]
+    out.drop(columns=["_allocated"], inplace=True)
 
-    # Drop counties with weight_sum = 0 (no valid price contribution)
+    # Drop counties with missing county_fips
     out = out.dropna(subset=[COUNTY_ID_COLUMN])
     # Re-apply string dtypes after groupby
     _ensure_string_columns(out, [c for c in STRING_COLUMNS if c in out.columns])
@@ -172,7 +150,7 @@ def build_county_from_zip(base_path: Path) -> pd.DataFrame:
 
     logger.info(f"After aggregate by {COUNTY_ID_COLUMN}: {len(out)} rows, columns: {list(out.columns)}")
     if _verbose:
-        print(f"\n--- county_from_zip (head) ---\n{out.head()}\n")
+        print(f"\n--- county_from_zip_num_dc (head) ---\n{out.head()}\n")
 
     return out
 
@@ -180,7 +158,7 @@ def build_county_from_zip(base_path: Path) -> pd.DataFrame:
 def main():
     global _verbose
     parser = argparse.ArgumentParser(
-        description="Build county-grain table from ZIP table (weighted average by business_ratio)."
+        description="Build county-grain table of allocated data center counts from ZIP table (sum of num_datacenters × business_ratio)."
     )
     parser.add_argument(
         "--output",
@@ -206,7 +184,7 @@ def main():
     output_path = base_path / args.output
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    print("Building county table from ZIP table (plan_zip_to_county_electricity_price)...")
+    print("Building county table from ZIP table (plan_zip_to_county_num_dc)...")
     df = build_county_from_zip(base_path)
     # Ensure string columns are string before write
     _ensure_string_columns(df, [c for c in STRING_COLUMNS if c in df.columns])

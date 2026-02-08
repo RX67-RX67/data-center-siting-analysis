@@ -17,6 +17,50 @@ logger = logging.getLogger(__name__)
 _verbose = True
 
 
+def _print_missing_counts(df: pd.DataFrame, table_name: str) -> None:
+    """Print missing value count per column for the input table (when not quiet)."""
+    if not _verbose:
+        return
+    n = len(df)
+    missing = df.isna().sum()
+    lines = [f"Missing values in input table '{table_name}' (n={n} rows):"]
+    for col in df.columns:
+        cnt = int(missing[col])
+        pct = (100.0 * cnt / n) if n else 0.0
+        lines.append(f"  {col}: {cnt} ({pct:.2f}%)")
+    print("\n" + "\n".join(lines) + "\n")
+
+
+# US state and territory abbreviation -> full name (for state_cap column)
+STATE_ABBR_TO_FULL = {
+    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas", "CA": "California",
+    "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware", "DC": "District of Columbia",
+    "FL": "Florida", "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho", "IL": "Illinois",
+    "IN": "Indiana", "IA": "Iowa", "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana",
+    "ME": "Maine", "MD": "Maryland", "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota",
+    "MS": "Mississippi", "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
+    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
+    "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma", "OR": "Oregon",
+    "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina", "SD": "South Dakota",
+    "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont", "VA": "Virginia",
+    "WA": "Washington", "WV": "West Virginia", "WI": "Wisconsin", "WY": "Wyoming",
+    "AS": "American Samoa", "FM": "Federated States of Micronesia", "GU": "Guam",
+    "MH": "Marshall Islands", "MP": "Northern Mariana Islands", "PW": "Palau", "PR": "Puerto Rico",
+    "VI": "U.S. Virgin Islands",
+}
+
+
+def _map_state_cap_to_full(df: pd.DataFrame) -> pd.DataFrame:
+    """Map state_cap (abbreviation) to state (full name), then drop state_cap."""
+    if "state_cap" not in df.columns:
+        return df
+    cap = df["state_cap"].astype(str).str.strip().str.upper()
+    df = df.copy()
+    df["state"] = cap.map(lambda x: STATE_ABBR_TO_FULL.get(x, x) if pd.notna(x) and x else "")
+    df = df.drop(columns=["state_cap"])
+    return df
+
+
 def _resolve_path(path_str: str, base_path: Path) -> Path:
     p = Path(path_str)
     return base_path / p if not p.is_absolute() else p
@@ -142,11 +186,13 @@ def _read_table(name: str, base_path: Path) -> pd.DataFrame:
 def build_reference_table(base_path: Path) -> pd.DataFrame:
     """Load zip_to_fips and fips_to_county, join on county_fips."""
     zip_fips = _read_table("zip_to_fips", base_path)
+    _print_missing_counts(zip_fips, "zip_to_fips")
     logger.info(f"zip_to_fips: {len(zip_fips)} rows")
     if _verbose:
         print(f"\n--- zip_to_fips (final) ---\n{zip_fips.head()}\n")
 
     fips_county = _read_table("fips_to_county", base_path)
+    _print_missing_counts(fips_county, "fips_to_county")
     logger.info(f"fips_to_county: {len(fips_county)} rows")
     if _verbose:
         print(f"\n--- fips_to_county (final) ---\n{fips_county.head()}\n")
@@ -159,6 +205,11 @@ def build_reference_table(base_path: Path) -> pd.DataFrame:
     logger.info(f"Reference table (after join): {len(ref)} rows, columns: {list(ref.columns)}")
     if _verbose:
         print(f"\n--- reference_table (after join) ---\n{ref.head()}\n")
+
+    ref = _map_state_cap_to_full(ref)
+    logger.info("Mapped state_cap -> state (full name), dropped state_cap")
+    if _verbose:
+        print(f"\n--- reference_table (final) ---\n{ref.head()}\n")
     return ref
 
 
@@ -168,7 +219,7 @@ def main():
     parser.add_argument(
         "--output",
         type=str,
-        default="data/processed_data/reference_table.csv",
+        default="data/processed_data/data_build/reference_table.csv",
         help="Output CSV path",
     )
     parser.add_argument(
