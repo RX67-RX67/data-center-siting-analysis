@@ -6,7 +6,7 @@ STATES=(
   # alaska
   # arizona
   # arkansas
-  # california
+  # california # need to be scraped again
   # colorado
   # connecticut
   # delaware
@@ -34,25 +34,25 @@ STATES=(
   # new-hampshire
   # new-jersey
   # new-mexico
-  # new-york
+  # new-york # need to be scraped again
   # north-carolina
   # north-dakota
   # ohio
   # oklahoma
   # oregon
   # pennsylvania
-  rhode-island
-  south-carolina
-  south-dakota
-  tennessee
-  texas
-  utah
-  vermont
-  virginia
-  washington
-  west-virginia
-  wisconsin
-  wyoming
+  # rhode-island # need to be scraped again
+  # south-carolina
+  # south-dakota
+  # tennessee
+  texas # need to be scraped again
+  # utah
+  # vermont
+  # virginia
+  # washington
+  # west-virginia
+  # wisconsin
+  # wyoming
 )
 
 for state in "${STATES[@]}"; do
