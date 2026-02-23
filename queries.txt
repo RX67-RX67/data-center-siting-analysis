@@ -1,18 +1,74 @@
 data center county zoning ordinance
 data center county zoning code
+data center county zoning amendment
 data center county land use ordinance
+data center county land use policy
+data center county comprehensive plan data center
 data center county conditional use permit
 data center county special use permit
+data center county site plan approval
 data center county moratorium
 data center county ban
 data center county pause data center
+data center county halt data center development
 data center county planning commission data center
-data center county board of supervisors
+data center county board of supervisors data center
+data center county board of supervisors ordinance
 data center county public hearing data center
-data center county zoning amendment
+data center county zoning board data center
 data center "County" ordinance
 data center "County" zoning
 data center "County" moratorium
+data center "County" ban
 data center county water usage data center
+data center county water withdrawal
+data center county cooling water policy
 data center county power infrastructure policy
-data center county tax incentive data center
+data center county electricity demand policy
+data center county grid capacity data center
+data center county tax incentive
+data center county tax abatement
+data center county tax exemption
+data center county PILOT agreement data center
+data center county payment in lieu of taxes
+data center county property tax incentive
+data center county sales tax exemption data center
+data center county economic development incentive
+data center county IDA incentive
+data center county industrial development agency data center
+data center county economic development agreement
+data center county environmental review data center
+data center county environmental impact
+data center county SEQRA data center
+data center county siting ordinance
+data center county siting policy
+data center county siting regulation
+data center county development approval
+data center county facility approval
+data center county data center restriction
+data center county ordinance restriction
+data center county local law data center
+data center county resolution data center
+data center county legislation data center
+data center county regulation data center
+data center county policy data center
+data center county vote data center moratorium
+data center county vote data center ban
+data center county reject data center
+data center county approve data center
+data center county application data center
+data center county permit data center
+data center county variance data center
+data center county rezoning data center
+data center county industrial zone data center
+data center county utility scale data center
+data center county campus county
+data center county facility county
+datacenter county ordinance
+datacenter county zoning
+datacenter county moratorium
+datacenter county tax incentive
+datacenter county permit
+data centre county ordinance
+data centre county moratorium
+data centre county zoning

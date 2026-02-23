@@ -65,6 +65,7 @@ def llm_checker(text:str) -> Dict[str, Any]:
 
     Your task:
     - Decide whether the input text is about data center related public policy.
+    - Decide whether the input text supports data center siting in the mentioned county.
     - Extract mentioned US county and state if present.
 
     Return ONLY a valid JSON object.
@@ -78,6 +79,7 @@ def llm_checker(text:str) -> Dict[str, Any]:
     "mentioned_state": string or null,   
     "mentioned_county": string or null, 
     "is_data_center_policy": boolean,
+    "support_data_center_siting": boolean,
     "policy_type": string or null,       
     "summary": string,                   
     "llm_confidence": number             
@@ -106,6 +108,7 @@ def llm_checker(text:str) -> Dict[str, Any]:
             "mentioned_state": None,
             "mentioned_county": None,
             "is_data_center_policy": False,
+            "support_data_center_siting": False,
             "policy_type": None,
             "summary": "",
             "llm_confidence": 0.0,
