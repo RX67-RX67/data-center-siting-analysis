@@ -26,8 +26,8 @@ def main():
     parser.add_argument(
         "--max_chars",
         type=int,
-        default=8000,
-        help="Maximum number of characters to process each url(default: 8000)"
+        default=10000,
+        help="Maximum number of characters to process each url(default: 10000)"
     )
     args = parser.parse_args()
     

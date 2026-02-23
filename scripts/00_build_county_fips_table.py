@@ -21,6 +21,24 @@ sys.path.insert(0, str(project_root))
 
 from src.configs.sources_county_fips import SOURCES_COUNTY_FIPS
 
+# US state and territory abbreviation -> full name (for state column in output)
+STATE_ABBR_TO_FULL = {
+    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas", "CA": "California",
+    "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware", "DC": "District of Columbia",
+    "FL": "Florida", "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho", "IL": "Illinois",
+    "IN": "Indiana", "IA": "Iowa", "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana",
+    "ME": "Maine", "MD": "Maryland", "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota",
+    "MS": "Mississippi", "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
+    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
+    "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma", "OR": "Oregon",
+    "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina", "SD": "South Dakota",
+    "TN": "Tennessee", "TX": "Texas", "UT": "Utah", "VT": "Vermont", "VA": "Virginia",
+    "WA": "Washington", "WV": "West Virginia", "WI": "Wisconsin", "WY": "Wyoming",
+    "AS": "American Samoa", "FM": "Federated States of Micronesia", "GU": "Guam",
+    "MH": "Marshall Islands", "MP": "Northern Mariana Islands", "PW": "Palau", "PR": "Puerto Rico",
+    "VI": "U.S. Virgin Islands",
+}
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -295,6 +313,15 @@ def build_county_fips_table(base_path: Path, table_names: list[str] | None = Non
             out = out.merge(df, on=join_key, how="outer")
         else:
             out = pd.concat([out, df], axis=1)
+    # Normalize state column from abbreviation to full name with capital first letter
+    if "state" in out.columns:
+        s = out["state"].astype(str).str.strip()
+        # Map 2-letter abbreviations; keep other values but title-case them
+        mapped = s.str.upper().map(STATE_ABBR_TO_FULL)
+        # Where mapping fails, fall back to title-cased original
+        fallback = s.str.title()
+        out["state"] = mapped.fillna(fallback).astype("string")
+
     logger.info(f"County FIPS table: {len(out)} rows, columns: {list(out.columns)}")
     if _verbose:
         print(f"\n--- county_fips_table (final) ---\n{out.head()}\n")

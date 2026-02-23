@@ -134,26 +134,38 @@ def main():
     else:
         df = df[df[IS_POLICY_COL].apply(_is_true)]
 
-    # 5) support_data_center_siting: True -> 1, False -> -1
+    # 5) support_data_center_siting: True -> 1, False -> -1, neutral -> 0
     if SUPPORT_SITING_COL in df.columns:
         def map_siting(val):
             if pd.isna(val):
+                return 0
+            s = str(val).strip().lower()
+            if s in ("true", "1", "yes"):
+                return 1
+            if s in ("false", "0", "no"):
                 return -1
-            return 1 if _is_true(val) else -1
+            if s == "neutral":
+                return 0
+            return 0
         df[SUPPORT_SITING_COL] = df[SUPPORT_SITING_COL].apply(map_siting)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, index=False, encoding="utf-8")
     print(f"Wrote {len(df)} rows to {output_path}")
 
-    # 6) County-level summary: list each (state, county) with counts of 1 and -1 for support_data_center_siting
-    #    Filter to rows that have more than one support_count OR more than one oppose_count
+    # 6) County-level summary: list each (state, county) with counts of 1, -1, and 0 for support_data_center_siting
+    #    Filter to rows that have more than one support_count OR more than one oppose_count OR more than one neutral_count
     if SUPPORT_SITING_COL in df.columns:
         agg = df.groupby([STATE_COL, COUNTY_COL], as_index=False).agg(
             support_count=(SUPPORT_SITING_COL, lambda s: (s == 1).sum()),
             oppose_count=(SUPPORT_SITING_COL, lambda s: (s == -1).sum()),
+            neutral_count=(SUPPORT_SITING_COL, lambda s: (s == 0).sum()),
         )
-        agg = agg[(agg["support_count"] > 1) | (agg["oppose_count"] > 1)]
+        agg = agg[
+            (agg["support_count"] > 1)
+            | (agg["oppose_count"] > 1)
+            | (agg["neutral_count"] > 1)
+        ]
         review_output_path.parent.mkdir(parents=True, exist_ok=True)
         agg.to_csv(review_output_path, index=False, encoding="utf-8")
         print(f"Wrote {len(agg)} rows to {review_output_path}")
