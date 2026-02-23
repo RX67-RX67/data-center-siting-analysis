@@ -6,7 +6,7 @@ STATES=(
   # alaska
   # arizona
   # arkansas
-  # california # need to be scraped again
+  # california
   # colorado
   # connecticut
   # delaware
@@ -34,18 +34,18 @@ STATES=(
   # new-hampshire
   # new-jersey
   # new-mexico
-  # new-york # need to be scraped again
+  # new-york 
   # north-carolina
   # north-dakota
   # ohio
   # oklahoma
   # oregon
   # pennsylvania
-  # rhode-island # need to be scraped again
+  # rhode-island 
   # south-carolina
   # south-dakota
   # tennessee
-  texas # need to be scraped again
+  # texas 
   # utah
   # vermont
   # virginia
