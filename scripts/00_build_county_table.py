@@ -215,6 +215,15 @@ def _read_table(name: str, base_path: Path) -> pd.DataFrame:
         if _verbose:
             print(f"\n--- {name} (after dtypes) ---\n{df.dtypes}\n")
 
+    # Column-specific handling (e.g. county_fips: normalize to 5-digit string with leading zeros)
+    if "column_handling" in spec:
+        for col, desc in spec["column_handling"].items():
+            if col not in df.columns:
+                continue
+            if "zfill(5)" in desc or "5-digit" in desc.lower():
+                df[col] = df[col].astype(str).str.strip().str.zfill(5).astype("string")
+                logger.info(f"Normalized {col} to 5-digit string (zfill)")
+
     logger.info(f"After rename/keep: {len(df)} rows, columns: {list(df.columns)}")
     if _verbose:
         print(f"\n--- {name} (after rename/keep) ---\n{df.head()}\n")

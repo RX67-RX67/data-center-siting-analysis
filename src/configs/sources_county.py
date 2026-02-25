@@ -97,10 +97,13 @@ SOURCES_COUNTY = {
         "path": "data/raw_data/environmental_risk/National_Risk_Index_Counties_807384124455672111.csv",
         "format": "csv",
         "vintage": 2025,
+        # State-County FIPS Code: read as string to preserve leading zeros; in pipeline normalize to
+        # 5-digit string by left zero-padding (e.g. 1001 → 01001, 1003 → 01003).
         "read_dtypes": {
             "State Name": "string",
             "County Name": "string",
             "County Type": "string",
+            "State-County FIPS Code": "string",
             # Features used in downstream computations / proxies
             "Community Resilience - Value": "float64",
             "Community Risk Factor - Value": "float64",
@@ -122,6 +125,7 @@ SOURCES_COUNTY = {
         "keys": {
             "state": "State Name",
             "county": "county_name",
+            "county_fips": "State-County FIPS Code",
         },
         "combine_columns": {
             "county_name": {
@@ -130,6 +134,12 @@ SOURCES_COUNTY = {
                 "separator": " ",
                 "dtype": "string",
             }
+        },
+        # Pipeline handling for State-County FIPS Code (key: county_fips):
+        # Keep as a 5-digit string. If the raw value has fewer than 5 digits, left-pad with zeros
+        # (e.g. 1001 → 01001, 1003 → 01003). Read as string in read_dtypes to avoid losing leading zeros.
+        "column_handling": {
+            "county_fips": "Normalize to 5-digit string: strip, then zfill(5) (e.g. 1001 → 01001).",
         },
         "value_columns": {
             "community_resilience_value":"Community Resilience - Value",
@@ -152,6 +162,7 @@ SOURCES_COUNTY = {
         "dtypes": {
             "state": "string",
             "county": "string",  # constructed from County Name + County Type
+            "county_fips": "string",  # 5-digit FIPS; pipeline must left zero-pad if < 5 digits
             # Value columns used in downstream computations
             "community_resilience_value": "float64",
             "community_risk_factor_value": "float64",
