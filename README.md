@@ -34,51 +34,77 @@ This project integrates multiple public datasets to construct a county-level dat
 
 ### Data Collection and Integration
 
-The pipeline shown below integrates several data processing pipelines. It illustrates how raw datasets from multiple sources are collected, cleaned, and transformed into structured tables. In addition, web-scraped information is organized into standardized datasets through dedicated scripts.
+The pipeline shown below summarizes how multiple data sources are processed and integrated into a unified dataset. Raw datasets from various sources are collected, cleaned, and transformed into structured tables, while web-scraped information is organized into standardized datasets through dedicated scripts.
 
-These intermediate tables are then merged into a final county-level working table, which serves as the primary dataset for feature engineering and predictive modeling.
+These intermediate tables are subsequently merged into a final county-level working table, which serves as the primary dataset for downstream feature engineering and predictive modeling.
+
+Implementation details for each stage of the pipeline can be found in the [scripts](scripts) directory.
 
 ```mermaid
 
 flowchart TD
 
-    subgraph S1[Data Sources]
-        A[Raw Tables]
-        B[Data Center Information]
-        C[County-Level Policy Data]
-        D[Geographic Reference Data]
+    %% ===== Styles =====
+    classDef main font-size:18px,font-weight:bold;
+    classDef group font-size:16px,font-weight:bold;
+    classDef output font-size:18px,font-weight:bold;
+    classDef normal font-size:14px;
+
+    %% ===== Left sources =====
+    subgraph S1[Structured Data Sources]
+        direction TB
+        A1[Raw Tables]
+        A2[Geographic Reference Data / County / ZIP / Crosswalk]
+        A3[Table Configurations]
     end
 
-    subgraph S2[Processing Pipelines]
-        E[Source Table Processing]
-        F[Web Scraping Pipelines]
-        G[Policy Feature Engineering]
-        H[Table Merge Pipeline]
-        I[Data Cleaning and Standardization]
+    %% ===== Right sources =====
+    subgraph S2[Web and Policy Sources]
+        direction TB
+        B1[Data Center Information Scraper]
+        B2[County-Level Policy Scraper]
+        B3[County-Level Policy LLM Checker]
     end
 
-    subgraph S3[Outputs]
-        J[01_tables]
-        K[02_tables]
-        L[03_tables / Final Working Table]
-    end
+    %% ===== Main pipeline =====
+    C1[Source Table Processing]
+    C2[Web Scraping Pipelines]
+    D1[01_tables]
+    D2[Table Merge Pipeline]
+    D3[02_tables]
+    D4[Policy Feature Engineering]
+    D5[Data Cleaning and Standardization]
+    E1[03_tables / Final Working Table]
+    E2[Predictive Modeling]
 
-    A --> E
-    D --> E
-    B --> F
-    C --> F
+    %% ===== Connections =====
+    A1 --> C1
+    A2 --> C1
+    A3 --> C1
 
-    E --> J
-    F --> J
-    J --> H
-    H --> K
-    K --> G
-    G --> L
-    L --> I
+    B1 --> C2
+    B2 --> C2
+    B3 --> C2
+
+    C1 --> D1
+    C2 --> D1
+    D1 --> D2
+    D2 --> D3
+    D3 --> D4
+    D4 --> D5
+    D5 --> E1
+    E1 --> E2
+
+    %% ===== Apply styles =====
+    class S1,S2 group;
+    class C1,C2,D2,D4,D5 normal;
+    class D1,D3 normal;
+    class E1,E2 main;
     
 ```
 
 ## Feature Engineering
+
 
 
 ## Target Variable
