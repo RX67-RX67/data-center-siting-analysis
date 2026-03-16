@@ -1,10 +1,8 @@
 # Data Center Siting Analysis and Predictive Modeling at the County Level
 
-## Background
+## Project Overview
 
 The project was initially developed as part of a course project and has since been extended to incorporate a broader data pipeline, feature engineering, and predictive modeling framework.
-
-## Project Overview
 
 AI growth has made data centers critical infrastructure; rising demand and investment are increasing their role in regional development. This project aims to explore the following research questions:
 
@@ -14,7 +12,7 @@ AI growth has made data centers critical infrastructure; rising demand and inves
 
 ## Data Sources
 
-This project integrates multiple public datasets to construct a county-level dataset for data center site analysis. Detailed dataset metadata and configuration files can be found in `[src/configs](src/configs)`.
+This project integrates multiple public datasets to construct a county-level dataset for data center site analysis. Detailed dataset metadata and configuration files can be found in [src/configs](src/configs).
 
 | Dataset | Source | Granularity | Vintage | Description |  
 |-------|-------|-------------|------------------|--------|  
