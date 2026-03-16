@@ -30,11 +30,63 @@ This project integrates multiple public datasets to construct a county-level dat
 
 - **County-Level Policy Information**: Collected via web scraping from public policy sources and validated using an LLM-assisted human-in-the-loop review process.
 
-## Data Pipeline
+## Data Pipelines
+
+### Data Collection and Integration
+
+The pipeline shown below integrates several data processing pipelines. It illustrates how raw datasets from multiple sources are collected, cleaned, and transformed into structured tables. In addition, web-scraped information is organized into standardized datasets through dedicated scripts.
+
+These intermediate tables are then merged into a final county-level working table, which serves as the primary dataset for feature engineering and predictive modeling.
+
+```mermaid
+
+flowchart TD
+
+    subgraph S1[Data Sources]
+        A[Raw Tables]
+        B[Data Center Information]
+        C[County-Level Policy Data]
+        D[Geographic Reference Data]
+    end
+
+    subgraph S2[Processing Pipelines]
+        E[Source Table Processing]
+        F[Web Scraping Pipelines]
+        G[Policy Feature Engineering]
+        H[Table Merge Pipeline]
+        I[Data Cleaning and Standardization]
+    end
+
+    subgraph S3[Outputs]
+        J[01_tables]
+        K[02_tables]
+        L[03_tables / Final Working Table]
+    end
+
+    A --> E
+    D --> E
+    B --> F
+    C --> F
+
+    E --> J
+    F --> J
+    J --> H
+    H --> K
+    K --> G
+    G --> L
+    L --> I
+    
+```
 
 ## Feature Engineering
 
+
+## Target Variable
+
+
 ## Working Table
+
+
 
 ## Next Steps
 
