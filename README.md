@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-The project was initially developed as part of a course project and has since been extended to incorporate a broader data pipeline, feature engineering, and predictive modeling framework.
+The project was initially developed as part of a course project and has since been extended to incorporate a broader data pipeline, feature engineering, preprocessing, and predictive modeling framework.
 
 AI growth has made data centers critical infrastructure; rising demand and investment are increasing their role in regional development. This project aims to explore the following research questions:
 
@@ -10,9 +10,9 @@ AI growth has made data centers critical infrastructure; rising demand and inves
 
 - **Can these features be used to build predictive models that identify counties likely to attract future data center development?**
 
-## Repository Structure
+The full analysis pipeline — from raw data to county-level attractiveness rankings — is implemented across five Jupyter notebooks. The primary model is a **two-part hurdle model** (Option 2) using LightGBM, with SHAP-based interpretation separating the drivers of *presence* from the drivers of *scale*.
 
-The repository is organized as follows:
+## Repository Structure
 
 ```text
 project-root
@@ -20,7 +20,21 @@ project-root
 ├── data_revealed/               # intermediate and final datasets produced by pipelines
 │   ├── 01_tables/               # initial processed tables
 │   ├── 02_tables/               # merged / transformed tables
-│   └── 03_tables/               # final county-level working table
+│   ├── 03_tables/               # final raw working table (pre-preprocessing)
+│   └── 04_tables/               # preprocessed modeling table and model outputs
+│       ├── county_preprocessed.csv           # 3,138 counties × 42 cols, zero nulls
+│       └── county_attractiveness_ranking.csv # all counties ranked by model score
+│
+├── notebooks/                   # analysis notebooks (run in order)
+│   ├── eda.ipynb                # exploratory data analysis
+│   ├── preprocessing.ipynb      # feature preprocessing pipeline
+│   ├── modeling_option1_tweedie.ipynb  # Option 1: single LightGBM Tweedie model
+│   ├── modeling_option2_hurdle.ipynb   # Option 2: two-part hurdle model (primary)
+│   └── interpretation.ipynb    # SHAP interpretation and county ranking
+│
+├── models/                      # serialized trained models
+│   ├── option1_tweedie.joblib   # LGBMRegressor (Tweedie, p=1.3)
+│   └── option2_hurdle.joblib    # LGBMClassifier (Stage 1) + LGBMRegressor (Stage 2)
 │
 ├── scripts/                     # executable data pipelines and transformation scripts
 │   ├── 00_*.py                  # build tables from original data sources and collect web-scraped data
@@ -32,7 +46,7 @@ project-root
 │
 ├── tests/                       # unit tests for functions in src/
 │
-├── queries.txt                  # queries used for policy scraping 
+├── queries.txt                  # queries used for policy scraping
 ├── requirements.txt             # project dependencies
 ├── run_states.sh                # helper script for running state-level scraping jobs
 ├── .gitignore
@@ -104,7 +118,10 @@ flowchart TD
     D4[Policy Feature Engineering]
     D5[Data Cleaning and Standardization]
     E1[03_tables / Final Working Table]
-    E2[Predictive Modeling]
+    E2[Preprocessing Notebook]
+    E3[04_tables / Preprocessed Modeling Table]
+    E4[Modeling and Interpretation Notebooks]
+    E5[Saved Models + County Attractiveness Ranking]
 
     %% ===== Connections =====
     A1 --> C1
@@ -123,12 +140,17 @@ flowchart TD
     D4 --> D5
     D5 --> E1
     E1 --> E2
+    E2 --> E3
+    E3 --> E4
+    E4 --> E5
 
     %% ===== Apply styles =====
     class S1,S2 group;
     class C1,C2,D2,D4,D5 normal;
     class D1,D3 normal;
-    class E1,E2 main;
+    class E1,E3 main;
+    class E2,E4 normal;
+    class E5 output;
     
 ```
 
@@ -155,6 +177,11 @@ E --> F["Target Variable:<br/>Estimated Data Centers per County"]
 The resulting variable represents an estimated signal of data center presence at the county level. Although fractional values may appear due to the ZIP–county mapping process, the variable serves as a proxy for the relative number of data centers in each county and is used as the target variable for this project.
 
 The detailed transformation logic used to construct the final indicator is documented in [script](scripts/01_pipeline_zip_to_county_num_dc.py).
+
+The target exhibits two structural properties that jointly motivate the modeling choices:
+
+- **Zero inflation**: ~75.6% of the 3,138 counties have zero data centers. This is not a sampling artifact — it reflects genuine geographic concentration.
+- **Right-skewed positive tail**: among the 24.4% of counties with at least one data center, the distribution is extremely right-skewed (range: near-zero to ~700, with Loudoun County, VA as the dominant outlier).
 
 ## Feature Engineering
 
@@ -208,7 +235,7 @@ Starting from counts of airports by FAA class, rail track length, and dock/port 
 - **`infrastructure_quality`**  
   - **Source columns:** `infra_good_count`, `infra_fair_count`, `infra_poor_count` (aggregated from `Good`, `Fair`, `Poor`).  
   - **Method:** `(Good + 0.5 * Fair) / (Good + Fair + Poor)` when the denominator is > 0.  
-  - **Logic:** A weighted index of infrastructure condition that rewards “Good” more than “Fair” and penalizes “Poor”, providing a continuous measure of infrastructure health.
+  - **Logic:** A weighted index of infrastructure condition that rewards "Good" more than "Fair" and penalizes "Poor", providing a continuous measure of infrastructure health.
 
 - **`dock_presence`**  
   - **Source column:** `docks_count` (from `Docks`).  
@@ -228,7 +255,7 @@ The National Risk Index table is used mostly as‑is, but it is conceptually eng
 - **`land_value_1_4_acre_standardized`**  
   - **Source column:** `Land Value (1/4 Acre Lot, Standardized)` filtered to year 2023.  
   - **Method:** Extracted for each county FIPS and standardized by the source provider.  
-  - **Logic:** Serves as a proxy for commercial/urban land cost, approximating the price of a small standardized lot. Higher values imply more expensive land for siting.
+  - **Logic:** Serves as a proxy for commercial/urban land cost, approximating the price of a small standardized lot (dollar-denominated per 1/4-acre unit normalization, not a z-score). Higher values imply more expensive land for siting.
 
 ### Labor cost indicators (source: `labor_price` in [configuration script](src/configs/sources_county.py))
 
@@ -254,7 +281,7 @@ The BLS wage table is pivoted from long format (Industry as rows) into wide form
 The final policy features in the working table come from a **search → LLM check → aggregate** pipeline; they are not from a single raw table.
 
 1. **Search and candidate extraction**  
-   A set of search queries (e.g. “data center county moratorium”, “data center county zoning”) is run (see `queries.txt`). Organic search results are collected, and county names are extracted from titles and snippets using a “*Name* County” pattern. This yields a list of candidate (county, state) pairs with supporting URLs.
+   A set of search queries (e.g. "data center county moratorium", "data center county zoning") is run (see `queries.txt`). Organic search results are collected, and county names are extracted from titles and snippets using a "*Name* County" pattern. This yields a list of candidate (county, state) pairs with supporting URLs.
 
 2. **LLM check**  
    For each unique URL, the pipeline fetches page text (or uses cached snippets) and calls an LLM to classify:
@@ -266,16 +293,124 @@ The final policy features in the working table come from a **search → LLM chec
 
 3. **Cleaning and aggregation**  
    The LLM-output table is cleaned ([`00_llm_check_csv_clean.py`](scripts/00_llm_check_csv_clean.py)):
-   - Rows with missing state or county are dropped; state and county names are normalized (full state name, “*Name* County” form).
+   - Rows with missing state or county are dropped; state and county names are normalized (full state name, "*Name* County" form).
    - `support_data_center_siting` is mapped to numeric: **1** (support), **-1** (oppose), **0** (neutral).
-   - Only rows with **`is_data_center_policy == true`** are kept (these are the “policy” rows).
+   - Only rows with **`is_data_center_policy == true`** are kept (these are the "policy" rows).
    - The table is aggregated to **one row per (state, county)**:
      - **`has_policy_signal`** = 1 for every such county (since only counties with at least one policy mention remain).
      - **`policy_direction_score`** = mean of the numeric support values over all mentions of that county (range −1 to 1; 0 = neutral or mixed).
 
+## Preprocessing
+
+The preprocessing notebook (`notebooks/preprocessing.ipynb`) transforms the raw working table (`data_revealed/03_tables/county_final_table_clean.csv`, 3,149 rows × 41 cols) into a clean modeling-ready table (`data_revealed/04_tables/county_preprocessed.csv`, 3,138 rows × 42 cols, zero nulls).
+
+Key decisions made during preprocessing:
+
+| Step | Decision | Rationale |
+|---|---|---|
+| Join key | `county_key = state \|\| county` | 3 counties have placeholder FIPS codes; the composite string key is always unique |
+| Broadband columns | Drop 4 redundant coverage cols (`any_tech_100_20`, `cable_fiber_100_20`, `fiber_100_20`, `high_speed_wired`) | Highly collinear with retained cols; remove redundancy before modeling |
+| Suppression floor indicators | Add `*_above_floor` binary for `epg_natural_gas` (floor=5), `clean_energy_jobs` (floor=15), `grid_infrastructure_jobs` (floor=20) | BEA/EIA disclosure suppression assigns a fixed minimum to counties below the threshold; flag captures the real discontinuity |
+| Land value | Convert 23 negative values to NaN, add `land_value_missing` flag, impute with median | Negative dollar-denominated land values are assessor data artifacts, not valid observations |
+| Electricity prices | Convert zeros and values below $0.01/kWh to NaN, impute with median | 15+ counties had exact-zero or near-zero prices from unreliable utility reporting |
+| `dock_presence` | Keep as binary (0/1); exclude from `log1p` | The column is already binary; `log1p(1) = 0.693` is a pointless rescaling |
+| `log1p` transform | Apply to 24 continuous features (all NRI risk indices, energy/jobs counts, wages, prices, land value, air connectivity) | Right-skewed distributions; tree splits on rank order are more stable after compression |
+| `state` | Excluded from feature matrix | Geographic label that would absorb variance belonging to structural features (grid, wages, prices) |
+
+## Modeling
+
+Two modeling approaches are implemented and compared. Both use LightGBM as the base learner and the same 80/20 stratified train/test split (`random_state=42`, stratified on `y > 0`).
+
+### Option 1: Single LightGBM Tweedie (`notebooks/modeling_option1_tweedie.ipynb`)
+
+A single LightGBM regressor with the Tweedie objective (`1 < p < 2`) jointly models zero inflation and the right-skewed positive tail. The variance power `p` is tuned via 5-fold cross-validation.
+
+**Best `p` = 1.3** (compound Poisson-Gamma regime, selected from grid {1.1, …, 1.9}).
+
+### Option 2: Two-Part Hurdle Model — Primary (`notebooks/modeling_option2_hurdle.ipynb`)
+
+Decomposes the prediction into two stages:
+
+```
+E[y | X]  =  P(y > 0 | X)  ×  E[y | y > 0, X]
+              ──────────────    ─────────────────
+               Stage 1            Stage 2
+           LGBMClassifier      LGBMRegressor
+           (binary, AUC)       (Tweedie, p=1.8)
+```
+
+- **Stage 1** — trained on all 3,138 counties; `is_unbalance=True` handles the 75/25 class split.
+- **Stage 2** — trained only on the 767 positive counties; best Tweedie `p = 1.8` (Gamma-like regime, no zero inflation in the positive subset).
+
+The hurdle model is the **primary model** for this project because it produces separate SHAP interpretations for *presence* and *scale* — the central analytical goal.
+
+### Performance Comparison
+
+| Metric | Option 1 (Tweedie) | Option 2 (Hurdle) |
+|---|---|---|
+| Tweedie deviance (p=1.3) | 1.756 | 1.965 |
+| MAE (log1p scale) | 0.312 | **0.279** |
+| RMSE (log1p scale) | **0.474** | 0.524 |
+| AUC (has any DC) | 0.807 | **0.833** |
+| Median AE (raw scale) | 0.185 | **0.052** |
+| Stage 1 AUC | — | **0.847** |
+| Stage 1 Avg Precision | — | **0.701** |
+
+Option 2 achieves better presence discrimination (AUC +2.6 pp) and substantially lower median error on raw counts (0.052 vs 0.185), at the cost of slightly higher RMSE on the log scale. The principal advantage of Option 2 is interpretive: separate SHAP values for each stage.
+
+## Model Interpretation
+
+The interpretation notebook (`notebooks/interpretation.ipynb`) loads `models/option2_hurdle.joblib` and computes SHAP values (via `TreeExplainer`) on the held-out test set. Key findings:
+
+### What drives data center PRESENCE (Stage 1)
+
+| Rank | Feature | Direction | Interpretation |
+|---|---|---|---|
+| 1 | `clean_energy_jobs` | ↑ above floor | Counties with a real clean-energy sector are far more likely to have DCs |
+| 2 | `grid_infrastructure_jobs` | ↑ above floor | Grid infrastructure employment signals power capacity |
+| 3 | `land_value_1_4_acre_standardized` | ↑ positive | High land values proxy economic density, not just cost |
+| 4 | `wage_information` | ↑ positive | Existing IT labor market is a presence prerequisite |
+| 5–8 | NRI hazard indices (lightning, hurricane, tornado, heat) | ↑ positive | **Geographic confounders** — co-occur with Southeast/Mid-Atlantic DC hubs, not causal |
+
+### What drives data center SCALE (Stage 2)
+
+| Rank | Feature | Direction | Interpretation |
+|---|---|---|---|
+| 1 | `wage_information` | ↑ positive | **Agglomeration**: deeper IT talent attracts more facilities |
+| 2 | `grid_infrastructure_jobs` | ↑ above floor | Consistent grid capacity signal across both stages |
+| 3 | `clean_energy_jobs` | ↑ positive | Clean energy availability enables larger DC clusters |
+| 4 | `commercial_price` | varies | Electricity cost sensitivity rises at scale |
+| 5+ | NRI hazard indices | largely absent | Drop from top-10 presence → bottom-third for scale |
+
+### Key divergences between stages
+
+- **Hazard risk indices** (hurricane, cold wave, heat wave, earthquake) rank in the top 10 for presence but fall to ranks 20–30 for scale — confirming these are geographic confounders, not causal drivers.
+- **`wage_information`** rises from rank 4 (presence) to rank 1 (scale) — the clearest agglomeration signal in the data.
+- **`commercial_price`** rises from rank 9 (presence) to rank 4 (scale) — electricity cost becomes a competitive differentiator among counties that already have DCs.
+- **Broadband coverage rates** (`fiber_availability`, `any_tech_1000_100_coverage`) rank outside the top 20 in both stages — coverage is near-universal at the county level and does not discriminate between counties.
+
+## Outputs
+
+| File | Description |
+|---|---|
+| `data_revealed/04_tables/county_preprocessed.csv` | 3,138 × 42 modeling-ready table, zero nulls |
+| `data_revealed/04_tables/county_attractiveness_ranking.csv` | All 3,138 counties ranked by `P(has DC) × E[scale]` |
+| `models/option1_tweedie.joblib` | Serialized Option 1 model (LGBMRegressor, p=1.3) |
+| `models/option2_hurdle.joblib` | Serialized Option 2 models (Stage 1 classifier + Stage 2 regressor) |
+
+**Top 5 counties by attractiveness score** (from the ranking output):
+
+| Rank | County | State | Score |
+|---|---|---|---|
+| 1 | Loudoun County | Virginia | 17.79 |
+| 2 | Maricopa County | Arizona | 16.77 |
+| 3 | Cook County | Illinois | 16.45 |
+| 4 | Dallas County | Texas | 16.44 |
+| 5 | Harris County | Texas | 16.32 |
+
 ## Working Table
 
-The final working table can be found here [Final Working Table](data_revealed/03_tables/county_final_table_clean.csv).
+The raw working table before preprocessing can be found here: [Final Working Table](data_revealed/03_tables/county_final_table_clean.csv).
 
 | Feature | Description |
 |--------|-------------|
@@ -321,16 +456,8 @@ The final working table can be found here [Final Working Table](data_revealed/03
 | `has_policy_signal` | Binary: 1 if the county has at least one observed data-center policy signal (e.g. ordinance, moratorium), 0 otherwise. From LLM-checked search results. |
 | `policy_direction_score` | Mean of support direction over mentions: 1 = support, -1 = oppose, 0 = neutral. Range [-1, 1]. From LLM-checked policy snippets. |
 
-## Next Steps
-
-- **ONGOING** Exploratory Data Analysis (EDA)
-- Feature preprocessing and normalization
-- Model training and evaluation
-- Feature importance analysis
-
 ## Reference
 
 - Kearney. (2025). *[AI Data Center Location Attractiveness Index](https://www.kearney.com/industry/technology/article/ai-data-center-location-attractiveness-index)*
 - IBM. (2025). *[What is an AI Data Center](https://www.ibm.com/think/topics/ai-data-center)*
-- Epoch AI, ‘Frontier Data Centers’. Published online at epoch.ai. Retrieved from ‘[https://epoch.ai/data/data-centers’](https://epoch.ai/data/data-centers’) [online resource]. Accessed 21 Jan 2026.
-
+- Epoch AI, 'Frontier Data Centers'. Published online at epoch.ai. Retrieved from '[https://epoch.ai/data/data-centers'](https://epoch.ai/data/data-centers') [online resource]. Accessed 21 Jan 2026.
