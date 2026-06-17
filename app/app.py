@@ -134,7 +134,7 @@ if page == "📊 Overview":
 
     # ── KPI cards ──
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Counties Analyzed", "3,138")
+    c1.metric("Counties Analyzed", "3,138", help="Excludes Connecticut — see National Map for details.")
     c2.metric("Counties with DCs", "767  (24.4%)")
     c3.metric("Structural Features", "37")
     c4.metric("Top County", "Loudoun, VA  (304 DCs)")
@@ -308,6 +308,13 @@ elif page == "🗺️ National Map":
     )
     st.plotly_chart(fig_map, width="stretch")
     st.caption(f"Showing {len(plot_df):,} counties.")
+    st.warning(
+        "**Connecticut is excluded from this analysis.** In 2022 the Census Bureau replaced "
+        "Connecticut's 8 traditional counties with 9 planning regions, causing FIPS code "
+        "mismatches across data sources. Two key inputs — the USEER grid workforce data and "
+        "the AEI land price data — have no Connecticut coverage at the county level, so all "
+        "CT counties were dropped during preprocessing."
+    )
 
 
 # ════════════════════════════════════════════════════════════════════════════
