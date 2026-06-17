@@ -503,13 +503,7 @@ elif page == "🌱 Emerging Markets":
         "attractiveness": "Score",
     })
 
-    st.dataframe(
-        display.style
-            .background_gradient(subset=["P(presence)", "Score"], cmap="YlOrRd")
-            .format({"P(presence)": "{:.3f}", "E[scale]": "{:.2f}", "Score": "{:.3f}"}),
-        width="stretch",
-        height=550,
-    )
+    st.dataframe(display, width="stretch", height=550)
 
     st.caption(
         "💡 Counties with P(presence) > 0.5 and no current DCs are particularly interesting — "
