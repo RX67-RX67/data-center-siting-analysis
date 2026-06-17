@@ -1,0 +1,171 @@
+---
+title: "Emerging Markets"
+jupyter: python3
+---
+
+```{python}
+#| echo: false
+import warnings; warnings.filterwarnings("ignore")
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from pathlib import Path
+
+ROOT = Path("..").resolve()
+ranking = pd.read_csv(ROOT / "data_revealed/04_tables/county_attractiveness_ranking.csv", index_col="rank")
+
+zero_dc = ranking[ranking["num_datacenters"] == 0].copy()
+high_p  = zero_dc[zero_dc["p_presence"] >= 0.5].copy()
+```
+
+## What Is an Emerging Market?
+
+An **emerging market** in this context is a county that:
+
+1. Has **zero current data centers** (no incumbents to compete with)
+2. Has **high structural attractiveness** — the model finds the prerequisite conditions
+   for DC activity already in place
+
+These are first-mover opportunities: the infrastructure is there, the labor exists,
+the grid capacity is present — but no operator has yet planted a flag. The model
+identifies these by the gap between *structural readiness* and *realized investment*.
+
+```{python}
+#| echo: false
+print(f"Zero-DC counties: {len(zero_dc):,}")
+print(f"Zero-DC with P(presence) ≥ 0.50: {len(high_p):,}  ({len(high_p)/len(zero_dc)*100:.1f}% of zero-DC)")
+print(f"Zero-DC with P(presence) ≥ 0.75: {(zero_dc['p_presence'] >= 0.75).sum():,}")
+print(f"Zero-DC with P(presence) ≥ 0.90: {(zero_dc['p_presence'] >= 0.90).sum():,}")
+```
+
+## Top 30 Emerging Markets
+
+```{python}
+#| echo: false
+#| fig-cap: "Top 30 zero-DC counties by attractiveness score, colored by P(presence)."
+top30 = zero_dc.head(30).copy()
+top30["label"] = top30["county"] + ",  " + top30["state"]
+
+fig = px.bar(
+    top30, x="attractiveness", y="label",
+    orientation="h",
+    color="p_presence", color_continuous_scale="Blues",
+    labels={"label": "", "attractiveness": "Attractiveness Score", "p_presence": "P(presence)"},
+    text="attractiveness",
+)
+fig.update_traces(texttemplate="%{text:.2f}", textposition="outside")
+fig.update_layout(
+    yaxis=dict(autorange="reversed"),
+    plot_bgcolor="white", paper_bgcolor="white",
+    margin=dict(l=10, r=80, t=10, b=10), height=720,
+    coloraxis_colorbar=dict(title="P(presence)", thickness=12, len=0.6),
+    xaxis=dict(showgrid=True, gridcolor="#eee"),
+)
+fig.show()
+```
+
+## State-Level Concentration
+
+Where are emerging markets geographically concentrated? Some states appear repeatedly
+in the top emerging county list — suggesting that state-level policy and grid
+infrastructure create pockets of untapped potential.
+
+```{python}
+#| echo: false
+#| fig-cap: "Number of high-potential zero-DC counties (P ≥ 0.5) per state."
+state_counts = high_p.groupby("state").size().sort_values(ascending=False).head(20)
+
+fig = px.bar(
+    x=state_counts.values, y=state_counts.index,
+    orientation="h",
+    labels={"x": "Count of high-potential zero-DC counties", "y": ""},
+    color=state_counts.values, color_continuous_scale="Greens",
+    text=state_counts.values,
+)
+fig.update_traces(textposition="outside")
+fig.update_layout(
+    coloraxis_showscale=False,
+    yaxis=dict(autorange="reversed"),
+    plot_bgcolor="white", paper_bgcolor="white",
+    margin=dict(l=10, r=60, t=10, b=10), height=500,
+    xaxis=dict(showgrid=True, gridcolor="#eee"),
+)
+fig.show()
+```
+
+## P(presence) vs Expected Scale — The Opportunity Matrix
+
+Not all emerging markets are equal. The two-part model lets us distinguish:
+
+- **High P, High Scale**: structurally ready and likely to see significant activity
+- **High P, Low Scale**: likely to attract *some* activity but probably small deployments
+- **Low P, High Scale**: rare — unlikely to see activity despite high potential scale
+
+```{python}
+#| echo: false
+#| fig-cap: "Emerging market opportunity matrix. Point size = attractiveness score. Only zero-DC counties shown."
+fig = px.scatter(
+    zero_dc.head(200),
+    x="p_presence", y="expected_scale",
+    size="attractiveness", color="attractiveness",
+    color_continuous_scale="Plasma",
+    hover_name="county",
+    hover_data={"state": True, "p_presence": ":.3f",
+                "expected_scale": ":.2f", "attractiveness": ":.3f"},
+    labels={
+        "p_presence": "P(has DC) — Stage 1",
+        "expected_scale": "E[scale | DC present] — Stage 2",
+        "attractiveness": "Score",
+    },
+    size_max=18,
+)
+fig.add_vline(x=0.5, line_dash="dash", line_color="#999",
+              annotation_text="P=0.5 threshold", annotation_position="top left")
+fig.update_layout(
+    plot_bgcolor="white", paper_bgcolor="white",
+    margin=dict(l=10, r=10, t=10, b=10), height=440,
+    xaxis=dict(showgrid=True, gridcolor="#eee"),
+    yaxis=dict(showgrid=True, gridcolor="#eee"),
+    coloraxis_colorbar=dict(title="Score", thickness=12),
+)
+fig.show()
+```
+
+## Top Emerging Markets — Full Table
+
+```{python}
+#| echo: false
+display = zero_dc.head(50)[["county", "state", "p_presence", "expected_scale", "attractiveness"]].copy()
+display.index.name = "rank"
+display.columns = ["County", "State", "P(presence)", "E[scale]", "Attractiveness Score"]
+display["P(presence)"] = display["P(presence)"].round(3)
+display["E[scale]"] = display["E[scale]"].round(2)
+display["Attractiveness Score"] = display["Attractiveness Score"].round(3)
+display
+```
+
+## Investment Thesis Interpretation
+
+Three distinct opportunity profiles emerge from the top emerging markets:
+
+**Profile 1 — Metro Adjacency** *(e.g., New Hanover NC, Monmouth NJ)*
+Counties adjacent to established DC markets that have absorbed surrounding
+infrastructure development (grid, fiber, labor) without yet attracting operators.
+These are likely to see activity as primary markets become capacity-constrained.
+
+**Profile 2 — Underserved Regional Hubs** *(e.g., Mercer NJ, Clackamas OR)*
+Mid-size metros with strong structural foundations but no historical DC presence.
+Often offer lower land costs than primary markets with comparable grid and labor depth.
+
+**Profile 3 — Policy-Driven Opportunities** *(e.g., Sussex DE, Calvert MD)*
+Counties in states with favorable data center tax incentives and regulatory environments.
+The policy signal (`policy_direction_score`) contributes positively to attractiveness
+even where other structural factors are more moderate.
+
+::: {.callout-note}
+**Limitation**: This model captures structural conditions but cannot account for
+announced but not-yet-built capacity, utility queue positions, or off-market land
+deals. Real investment decisions require augmenting these signals with proprietary
+market intelligence.
+:::

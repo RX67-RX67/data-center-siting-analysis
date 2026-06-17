@@ -1,0 +1,176 @@
+---
+title: "Data Sources & Preprocessing"
+jupyter: python3
+---
+
+```{python}
+#| echo: false
+import warnings; warnings.filterwarnings("ignore")
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from pathlib import Path
+
+ROOT = Path("..").resolve()
+prep = pd.read_csv(ROOT / "data_revealed/04_tables/county_preprocessed.csv")
+ID_COLS = ["county_key", "county_fips", "county", "state", "num_datacenters"]
+feat_cols = [c for c in prep.columns if c not in ID_COLS]
+```
+
+## Data Sources
+
+The analysis draws on seven public data sources, each contributing a distinct dimension
+of county-level structural capacity. All data is cross-sectional at the county level
+and reflects conditions circa 2023–2025.
+
+| Source | Provider | Features Derived | Counties Covered |
+|---|---|---|---|
+| **Grid & Energy Workforce** | USEER 2023 | `clean_energy_jobs`, `grid_infrastructure_jobs` | 3,143 |
+| **Electricity Prices** | EIA 2023 (IOU zip-level) | `commercial_price`, `industrial_price` | 3,112 |
+| **Broadband / Internet** | FCC BDC May 2025 | `fiber_availability`, `any_tech_1000_100_coverage` | 3,143 |
+| **Labor Costs** | BLS OEWS 2023 | `wage_information`, `wage_computer_math` | ~2,800 |
+| **Land Values** | AEI Land Price 2023 | `land_value_1_4_acre_standardized` | ~2,400 |
+| **Transportation** | BTS / NTAD 2024 | `air_connectivity`, `rail_intensity`, `dock_presence` | 3,143 |
+| **Environmental Risk** | FEMA NRI 2023 | 12 hazard risk indices | 3,143 |
+| **Policy Signals** | State legislation (scraped) | `policy_direction_score` | 50 states |
+
+::: {.callout-warning}
+**Connecticut excluded**: In 2022 the Census Bureau replaced Connecticut's 8 traditional
+counties with 9 planning regions. The USEER grid data and AEI land price data lack
+county-level coverage for CT, causing all Connecticut rows to be dropped during the
+cross-source join.
+:::
+
+## Target Variable Construction
+
+The target variable — **number of data centers per county** — was constructed by
+geocoding a proprietary database of US data center locations to county FIPS codes,
+then aggregating counts. Fractional counts arise from facilities that span county lines
+(allocated by area overlap).
+
+```{python}
+#| echo: false
+#| fig-cap: "Target variable statistics. The extreme right skew motivates log1p transformation during modeling."
+y = prep["num_datacenters"]
+stats = pd.DataFrame({
+    "Statistic": ["Count", "Mean", "Median", "Std Dev", "Max", "% Zero", "% > 10", "% > 100"],
+    "Value": [
+        f"{len(y):,}",
+        f"{y.mean():.3f}",
+        f"{y.median():.3f}",
+        f"{y.std():.3f}",
+        f"{y.max():.1f}",
+        f"{(y == 0).mean()*100:.1f}%",
+        f"{(y > 10).mean()*100:.1f}%",
+        f"{(y > 100).mean()*100:.1f}%",
+    ]
+}).set_index("Statistic")
+stats
+```
+
+## Feature Engineering
+
+After merging all sources on county FIPS, 37 structural features were retained. Several
+features required non-trivial engineering choices:
+
+### BEA Data Suppression Floors
+
+The Bureau of Economic Analysis suppresses small cell values to protect privacy.
+Three energy-related features are heavily affected:
+
+```{python}
+#| echo: false
+suppression = pd.DataFrame({
+    "Feature": ["epg_natural_gas", "clean_energy_jobs", "grid_infrastructure_jobs"],
+    "Suppression Floor": [5, 15, 20],
+    "% at Floor": ["76.5%", "47.9%", "15.9%"],
+    "Implication": [
+        "Mostly uninformative — reflects suppression, not true zero",
+        "Nearly half of counties are at the floor",
+        "Moderate suppression — still useful for rankings",
+    ]
+}).set_index("Feature")
+suppression
+```
+
+Suppression indicator flags (`*_above_floor`) were added as binary features to allow
+the model to distinguish true low values from suppressed ones. This means SHAP values
+for these features should be interpreted carefully — a negative SHAP is often driven
+by the county being at the suppression floor rather than genuinely having low activity.
+
+### Electricity Price Aggregation
+
+EIA electricity prices are reported at the utility zip code level. The pipeline
+aggregates to county level by:
+
+1. Mapping zip codes to counties via the ZCTA crosswalk
+2. Computing a population-weighted average for counties with multiple utility territories
+3. Separately retaining commercial (`commercial_price`) and industrial (`industrial_price`) rates
+
+### Policy Direction Score
+
+State-level data center policy stances were scraped from legislative databases and
+classified on a scale of **−1 (hostile) to +1 (supportive)** using GPT-4 assistance,
+then validated manually. This feature is assigned uniformly to all counties within
+a state.
+
+## Feature Correlation Structure
+
+```{python}
+#| echo: false
+#| fig-cap: "Pearson correlation matrix for a subset of key structural features."
+key_feats = [
+    "clean_energy_jobs", "grid_infrastructure_jobs", "wage_information",
+    "commercial_price", "industrial_price", "land_value_1_4_acre_standardized",
+    "fiber_availability", "air_connectivity", "policy_direction_score",
+    "num_datacenters",
+]
+corr = prep[key_feats].corr().round(2)
+
+fig = px.imshow(
+    corr, text_auto=True, aspect="auto",
+    color_continuous_scale="RdBu_r", zmin=-1, zmax=1,
+    labels=dict(color="Pearson r"),
+)
+fig.update_layout(
+    margin=dict(l=10, r=10, t=30, b=10), height=480,
+    coloraxis_colorbar=dict(thickness=12, len=0.8),
+)
+fig.show()
+```
+
+Notable correlations:
+
+- `clean_energy_jobs` and `grid_infrastructure_jobs` are strongly correlated (r ≈ 0.75) —
+  both capture power sector depth and will compete for SHAP attribution.
+- `wage_information` correlates moderately with `num_datacenters` (r ≈ 0.45) —
+  the agglomeration signal visible even in raw correlations.
+- Electricity prices (`commercial_price`, `industrial_price`) show weak raw correlation
+  with DC counts, but emerge as important at scale in the Stage 2 model.
+
+## Preprocessing Pipeline
+
+```{python}
+#| eval: false
+#| code-fold: false
+# Simplified view of the preprocessing steps
+df = merge_all_sources(on="county_fips")   # left-join across 7 sources
+df = drop_counties_with_missing_core(df)   # requires grid + land price data
+df = add_suppression_flags(df)             # *_above_floor binary indicators
+df = log1p_transform(df, skewed_cols)      # right-skewed count features
+df = standardize(df, price_cols)           # z-score for price features
+df = fill_missing(df, strategy="median")   # remaining NaN → column median
+```
+
+The final preprocessed dataset contains **{n_counties:,} counties × {n_feats} features**
+before modeling.
+
+```{python}
+#| echo: false
+n_counties = len(prep)
+n_feats = len(feat_cols)
+print(f"Final dataset: {n_counties:,} counties × {n_feats} features")
+print(f"Target range: [{prep['num_datacenters'].min():.1f}, {prep['num_datacenters'].max():.1f}]")
+print(f"Positive rate: {(prep['num_datacenters'] > 0).mean()*100:.1f}%")
+```

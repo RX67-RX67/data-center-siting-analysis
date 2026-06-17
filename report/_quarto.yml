@@ -1,0 +1,42 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "US Data Center Siting Analysis"
+  description: "A structural county-level analysis of data center location drivers across 3,138 US counties"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Overview
+      - href: 01-data.qmd
+        text: Data & Preprocessing
+      - href: 02-modeling.qmd
+        text: Modeling
+      - href: 03-results.qmd
+        text: Interpretation
+      - href: 04-emerging.qmd
+        text: Emerging Markets
+    right:
+      - icon: github
+        href: https://github.com/RX67-RX67/data-center-siting-analysis
+  page-footer:
+    center: "Data Center Siting Analysis · Georgetown University · 2025"
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-tools: true
+    fig-align: center
+    highlight-style: github
+    html-math-method: katex
+
+jupyter: python3
+
+execute:
+  warning: false
+  message: false
+  echo: true

@@ -27,3 +27,6 @@ build/
 
 # Claude Code
 .claude/
+_site/
+.quarto/
+*.quarto_ipynb

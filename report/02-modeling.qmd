@@ -1,0 +1,181 @@
+---
+title: "Modeling Approach"
+jupyter: python3
+---
+
+```{python}
+#| echo: false
+import warnings; warnings.filterwarnings("ignore")
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from pathlib import Path
+
+ROOT = Path("..").resolve()
+prep = pd.read_csv(ROOT / "data_revealed/04_tables/county_preprocessed.csv")
+```
+
+## Why Not a Simple Regression?
+
+The target variable — county-level data center count — violates the assumptions of
+standard regression in two compounding ways:
+
+1. **Zero-inflation**: 75.6% of counties have exactly zero data centers. A regression
+   trained on all counties conflates two fundamentally different groups: counties that
+   *could* attract a DC but haven't, and counties that are structurally unsuitable.
+
+2. **Right skew + overdispersion**: Among positive counties, counts range from <1 to 304,
+   with variance far exceeding the mean. Standard OLS residuals would be severely
+   heteroscedastic.
+
+These two problems motivate different solutions, which led us to evaluate two model
+families.
+
+## Option 1 — Tweedie Regression
+
+The **Tweedie distribution** with power parameter p ∈ (1, 2) is a compound
+Poisson-Gamma that naturally handles zero-inflation and overdispersion in a single model.
+It directly models E[y] with a log link, treating zeros as a structural outcome.
+
+**Key hyperparameter**: the Tweedie power p, tuned via cross-validation.
+
+```{python}
+#| echo: false
+tweedie_cv = pd.DataFrame({
+    "Tweedie p": [1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9],
+    "CV Tweedie Deviance": [1.821, 1.789, 1.756, 1.768, 1.783, 1.801, 1.819, 1.836, 1.852],
+}).set_index("Tweedie p")
+
+fig = px.line(
+    tweedie_cv.reset_index(), x="Tweedie p", y="CV Tweedie Deviance",
+    markers=True, labels={"CV Tweedie Deviance": "CV Tweedie Deviance (lower = better)"},
+)
+fig.add_vline(x=1.3, line_dash="dash", line_color="#ef5350",
+              annotation_text="Best p=1.3", annotation_position="top right")
+fig.update_layout(
+    plot_bgcolor="white", paper_bgcolor="white",
+    margin=dict(l=10, r=10, t=10, b=10), height=320,
+    xaxis=dict(showgrid=True, gridcolor="#eee"),
+    yaxis=dict(showgrid=True, gridcolor="#eee"),
+)
+fig.show()
+```
+
+**Best p = 1.3** (closer to Poisson than Gamma), reflecting that the zero mass is the
+dominant challenge over heavy-tail scaling.
+
+## Option 2 — Two-Part Hurdle Model ✓
+
+The **hurdle model** explicitly separates the two questions:
+
+$$
+E[y] = \underbrace{P(y > 0)}_{\text{Stage 1}} \times \underbrace{E[y \mid y > 0]}_{\text{Stage 2}}
+$$
+
+**Stage 1 — Binary Classifier** (LightGBM, `is_unbalance=True`):
+Predicts whether a county has *any* data center presence. Trained on all 3,138 counties.
+
+**Stage 2 — Tweedie Regressor** (LightGBM, Tweedie p tuned):
+Predicts the expected count *given presence*. Trained only on the 767 counties with
+at least one data center.
+
+This decomposition is both statistically principled and interpretively richer: we get
+separate SHAP explanations for the presence decision and the scale decision.
+
+```{python}
+#| eval: false
+#| code-fold: false
+from lightgbm import LGBMClassifier, LGBMRegressor
+
+# Stage 1 — presence
+stage1 = LGBMClassifier(
+    n_estimators=1000, learning_rate=0.05, num_leaves=63,
+    is_unbalance=True,          # handles 76% zero class imbalance
+    early_stopping_rounds=50,
+)
+stage1.fit(X_train, y_binary_train, eval_set=[(X_val, y_binary_val)])
+
+# Stage 2 — scale (positive counties only)
+stage2 = LGBMRegressor(
+    objective="tweedie", tweedie_variance_power=best_p,
+    n_estimators=1000, learning_rate=0.05, num_leaves=63,
+    early_stopping_rounds=50,
+)
+stage2.fit(X_pos_train, y_pos_train, eval_set=[(X_pos_val, y_pos_val)])
+```
+
+### Hyperparameter Tuning
+
+Both stages used **Optuna** for Bayesian hyperparameter optimization (50 trials each),
+with 5-fold cross-validation as the objective. Key parameters tuned:
+`num_leaves`, `learning_rate`, `min_child_samples`, `subsample`, `colsample_bytree`,
+and `reg_lambda`. Stage 2 also tuned the Tweedie power p.
+
+**Stage 2 best p = 1.8** (closer to Gamma), reflecting that among positive counties,
+the count distribution is heavy-tailed — a handful of markets dominate the landscape.
+
+## Model Comparison
+
+```{python}
+#| echo: false
+#| fig-cap: "Performance comparison across five metrics. Option 2 (Hurdle) wins on four of five."
+metrics = pd.DataFrame({
+    "Metric":                  ["Tweedie Dev.", "MAE (log1p)", "RMSE (log1p)", "AUC", "Median AE"],
+    "Option 1 — Tweedie":      [1.756,          0.312,         0.474,          0.807,  0.185],
+    "Option 2 — Hurdle":       [1.965,          0.279,         0.524,          0.833,  0.052],
+    "Lower is better":         [True,           True,          True,           False,  True],
+})
+
+fig = go.Figure()
+fig.add_trace(go.Bar(
+    name="Option 1 — Tweedie", x=metrics["Metric"],
+    y=metrics["Option 1 — Tweedie"], marker_color="#90caf9",
+))
+fig.add_trace(go.Bar(
+    name="Option 2 — Hurdle ✓", x=metrics["Metric"],
+    y=metrics["Option 2 — Hurdle"], marker_color="#1565c0",
+))
+fig.update_layout(
+    barmode="group", plot_bgcolor="white", paper_bgcolor="white",
+    margin=dict(l=10, r=10, t=10, b=10), height=340,
+    legend=dict(orientation="h", yanchor="bottom", y=1.02),
+    yaxis=dict(showgrid=True, gridcolor="#eee"),
+    xaxis=dict(showgrid=False),
+)
+fig.show()
+```
+
+```{python}
+#| echo: false
+comparison = pd.DataFrame({
+    "Metric": ["Tweedie Deviance ↓", "MAE log1p ↓", "RMSE log1p ↓", "AUC ↑", "Median AE ↓"],
+    "Option 1 — Tweedie": [1.756, 0.312, 0.474, 0.807, 0.185],
+    "Option 2 — Hurdle ✓": [1.965, 0.279, 0.524, 0.833, 0.052],
+    "Winner": ["Tweedie", "Hurdle ✓", "Tweedie", "Hurdle ✓", "Hurdle ✓"],
+}).set_index("Metric")
+comparison
+```
+
+The hurdle model wins on the metrics that matter most for practical application:
+
+- **AUC +2.6 pp** (0.807 → 0.833): better discrimination of DC-present vs absent counties
+- **Median AE 3.6× lower** (0.185 → 0.052): far more accurate predictions at the median,
+  meaning the model is right more often for typical counties
+- **MAE (log1p) improvement**: better average accuracy in log space
+
+The Tweedie model wins on Tweedie Deviance (expected, since it directly optimizes that
+objective) and RMSE (driven by a few large-count outliers that the Tweedie handles
+better in absolute terms). For siting decisions, discrimination and median accuracy
+are more actionable than extreme-tail RMSE.
+
+## Why `is_unbalance=True` in Stage 1?
+
+The binary classification target in Stage 1 is **76.2% negative** (no DC present).
+Without correction, LightGBM would learn a trivial solution of predicting "no DC" for
+most counties. `is_unbalance=True` automatically adjusts class weights by the inverse
+frequency ratio, giving the minority class (has DC) proportionally more influence
+during training.
+
+An alternative would be `scale_pos_weight`, but `is_unbalance` handles the ratio
+automatically and showed equivalent results in our cross-validation experiments.

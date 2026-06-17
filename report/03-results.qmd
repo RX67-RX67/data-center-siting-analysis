@@ -1,0 +1,261 @@
+---
+title: "Model Interpretation"
+jupyter: python3
+---
+
+```{python}
+#| echo: false
+import warnings; warnings.filterwarnings("ignore")
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from pathlib import Path
+
+ROOT = Path("..").resolve()
+ranking  = pd.read_csv(ROOT / "data_revealed/04_tables/county_attractiveness_ranking.csv", index_col="rank")
+shap_df  = pd.read_csv(ROOT / "data_revealed/04_tables/shap_values.csv").set_index("county_key")
+prep     = pd.read_csv(ROOT / "data_revealed/04_tables/county_preprocessed.csv")
+
+s1_cols  = [c for c in shap_df.columns if c.startswith("s1_")]
+s2_cols  = [c for c in shap_df.columns if c.startswith("s2_")]
+s1_feats = [c[3:] for c in s1_cols]
+s2_feats = [c[3:] for c in s2_cols]
+
+sv1 = shap_df[s1_cols].values
+sv2 = shap_df[s2_cols].values
+```
+
+## SHAP Framework
+
+We use **SHAP (SHapley Additive exPlanations)** with `TreeExplainer` for exact SHAP
+values — not approximations. SHAP assigns each feature a contribution to the
+model's output for each individual county, with the sum of contributions equaling
+the difference between the county's prediction and the global mean prediction.
+
+$$
+f(x) = \phi_0 + \sum_{j=1}^{p} \phi_j
+$$
+
+where $\phi_0$ is the base value (mean prediction) and $\phi_j$ is feature $j$'s
+SHAP contribution. Positive SHAP → pushes prediction up; negative SHAP → pushes down.
+
+All 3,138 county SHAP values were pre-computed and stored for efficient lookup.
+
+## Global Feature Importance — Stage 1 (Presence)
+
+Mean |SHAP| across all counties ranks features by their average contribution to
+the presence probability. This is the model's answer to: *"What structural factors
+most determine whether a county attracts any data center?"*
+
+```{python}
+#| echo: false
+#| fig-cap: "Stage 1 mean |SHAP| — feature importance for P(has DC). Top 20 features shown."
+mean_abs_s1 = np.abs(sv1).mean(axis=0)
+imp_s1 = pd.DataFrame({"feature": s1_feats, "mean_abs_shap": mean_abs_s1})
+imp_s1 = imp_s1.sort_values("mean_abs_shap", ascending=True).tail(20)
+
+fig = px.bar(
+    imp_s1, x="mean_abs_shap", y="feature", orientation="h",
+    labels={"mean_abs_shap": "Mean |SHAP|", "feature": ""},
+    color="mean_abs_shap", color_continuous_scale="Blues",
+)
+fig.update_layout(
+    coloraxis_showscale=False, plot_bgcolor="white", paper_bgcolor="white",
+    margin=dict(l=10, r=10, t=10, b=10), height=520,
+    xaxis=dict(showgrid=True, gridcolor="#eee"),
+)
+fig.show()
+```
+
+## Global Feature Importance — Stage 2 (Scale)
+
+Among counties that already have data centers, what drives the count? Stage 2 answers
+this on the positive subset, revealing a different hierarchy.
+
+```{python}
+#| echo: false
+#| fig-cap: "Stage 2 mean |SHAP| — feature importance for E[count | DC present]. Top 20 features shown."
+mean_abs_s2 = np.abs(sv2).mean(axis=0)
+imp_s2 = pd.DataFrame({"feature": s2_feats, "mean_abs_shap": mean_abs_s2})
+imp_s2 = imp_s2.sort_values("mean_abs_shap", ascending=True).tail(20)
+
+fig = px.bar(
+    imp_s2, x="mean_abs_shap", y="feature", orientation="h",
+    labels={"mean_abs_shap": "Mean |SHAP|", "feature": ""},
+    color="mean_abs_shap", color_continuous_scale="Purples",
+)
+fig.update_layout(
+    coloraxis_showscale=False, plot_bgcolor="white", paper_bgcolor="white",
+    margin=dict(l=10, r=10, t=10, b=10), height=520,
+    xaxis=dict(showgrid=True, gridcolor="#eee"),
+)
+fig.show()
+```
+
+## Stage 1 vs Stage 2 — Rank Shift Analysis
+
+The two stages ask fundamentally different questions. Comparing feature ranks between
+them reveals which factors drive *entry* vs *clustering*.
+
+```{python}
+#| echo: false
+#| fig-cap: "Feature rank in Stage 1 vs Stage 2 (by mean |SHAP|). Lines show rank movement between stages."
+rank_s1 = pd.Series(np.abs(sv1).mean(axis=0), index=s1_feats).rank(ascending=False).astype(int)
+rank_s2 = pd.Series(np.abs(sv2).mean(axis=0), index=s2_feats).rank(ascending=False).astype(int)
+
+top_feats = rank_s1.nsmallest(15).index.tolist()
+rank_df = pd.DataFrame({
+    "feature": top_feats,
+    "Stage 1 Rank": rank_s1[top_feats].values,
+    "Stage 2 Rank": rank_s2[top_feats].values,
+})
+rank_df["shift"] = rank_df["Stage 1 Rank"] - rank_df["Stage 2 Rank"]
+rank_df["color"] = rank_df["shift"].apply(lambda x: "#43a047" if x < -3 else ("#ef5350" if x > 3 else "#90a4ae"))
+rank_df = rank_df.sort_values("Stage 1 Rank")
+
+fig = go.Figure()
+for _, row in rank_df.iterrows():
+    fig.add_trace(go.Scatter(
+        x=[1, 2], y=[row["Stage 1 Rank"], row["Stage 2 Rank"]],
+        mode="lines+markers+text",
+        line=dict(color=row["color"], width=2),
+        marker=dict(size=8, color=row["color"]),
+        text=["", row["feature"]],
+        textposition="middle right",
+        showlegend=False,
+        hovertemplate=f"{row['feature']}<br>S1 rank: {row['Stage 1 Rank']}<br>S2 rank: {row['Stage 2 Rank']}<extra></extra>",
+    ))
+fig.update_layout(
+    xaxis=dict(tickvals=[1, 2], ticktext=["Stage 1<br>(Presence)", "Stage 2<br>(Scale)"],
+               showgrid=False, range=[0.8, 2.8]),
+    yaxis=dict(autorange="reversed", showgrid=True, gridcolor="#eee",
+               title="Rank (1 = most important)"),
+    plot_bgcolor="white", paper_bgcolor="white",
+    margin=dict(l=10, r=180, t=20, b=20), height=480,
+)
+fig.show()
+```
+
+```{python}
+#| echo: false
+rank_df_display = rank_df[["feature", "Stage 1 Rank", "Stage 2 Rank", "shift"]].copy()
+rank_df_display.columns = ["Feature", "Stage 1 Rank", "Stage 2 Rank", "Rank Change (↑ = rises in S2)"]
+rank_df_display = rank_df_display.sort_values("Stage 1 Rank").set_index("Feature")
+rank_df_display
+```
+
+## Key Interpretive Findings
+
+### 1. Power Infrastructure as the Entry Gate
+
+`clean_energy_jobs` (rank 1, S1) and `grid_infrastructure_jobs` (rank 2, S1) are the
+two strongest presence predictors. These are not directly measuring power *availability*
+but rather the depth of the **power sector workforce** — a proxy for grid capacity,
+interconnection maturity, and the density of utility infrastructure needed to serve a
+hyperscale campus.
+
+This aligns with industry reporting: power access (not just price) is consistently
+cited as the top constraint on new data center development.
+
+### 2. The Agglomeration Signal in `wage_information`
+
+`wage_information` — the average wage in information-sector occupations — rises from
+**rank 4 in Stage 1 to rank 1 in Stage 2**. This is the clearest agglomeration signal
+in the model:
+
+- At the presence stage, IT labor is important but secondary to power infrastructure
+- At the scale stage, it becomes the dominant factor — established markets attract
+  more facilities because they've already built deep IT talent pools
+
+This is consistent with the "tech cluster" dynamic: once a few large operators anchor
+in a metro, the labor market deepens, which attracts more operators, reinforcing the cluster.
+
+### 3. Geographic Confounding in Hazard Risk Indices
+
+NRI hazard risk indices (lightning, hurricane, tornado, earthquake) appear in the
+**top 8 Stage 1 predictors** but fall to **ranks 20–30 in Stage 2**. This pattern
+is diagnostic of **geographic confounding**:
+
+The existing US data center market is concentrated in Virginia (high lightning risk),
+Texas (hurricane/tornado risk), and Georgia (coastal storm risk). The model learns
+this geographic correlation in Stage 1. But once we condition on positive counties
+in Stage 2, the hazard indices lose predictive power — confirming they are proxies
+for *where the market already is*, not genuine attractors.
+
+::: {.callout-important}
+**Policy implication**: Hazard risk should not be used as a site selection criterion
+based on this model. Counties with lower hazard risk are not inherently less attractive —
+the observed correlation reflects historical accident, not structural causation.
+:::
+
+### 4. Electricity Cost Sensitivity at Scale
+
+`commercial_price` rises from rank 9 (S1) to rank 4 (S2). Cost sensitivity is
+a **scale-dependent phenomenon**: small operators may accept above-market power costs
+if other factors (labor, land, connectivity) are favorable, but hyperscale campuses
+consuming 100s of MW are acutely sensitive to cents-per-kWh differences.
+
+## County Deep Dive — Top 3 Profiles
+
+```{python}
+#| echo: false
+def county_profile(county_key, label):
+    row = ranking[ranking["county_key"] == county_key].iloc[0]
+    sv1_row = shap_df.loc[county_key, s1_cols].values.astype(float)
+    sv2_row = shap_df.loc[county_key, s2_cols].values.astype(float)
+
+    idx1 = np.argsort(np.abs(sv1_row))[-8:][::-1]
+    idx2 = np.argsort(np.abs(sv2_row))[-8:][::-1]
+
+    profile = pd.DataFrame({
+        "Stage 1 Feature": [s1_feats[i] for i in idx1],
+        "S1 SHAP": [sv1_row[i] for i in idx1],
+        "Stage 2 Feature": [s2_feats[i] for i in idx2],
+        "S2 SHAP": [sv2_row[i] for i in idx2],
+    })
+    return row, profile
+
+for ck, lbl in [
+    ("Virginia||Loudoun County",   "#1 Loudoun County, VA"),
+    ("Texas||Travis County",       "#4 Travis County, TX"),
+    ("North Carolina||New Hanover County", "#80 New Hanover County, NC (zero DC)"),
+]:
+    row, profile = county_profile(ck, lbl)
+    print(f"\n{'='*60}")
+    print(f"{lbl}")
+    print(f"  DCs: {row['num_datacenters']:.1f}  |  P(presence): {row['p_presence']:.3f}  "
+          f"|  Score: {row['attractiveness']:.3f}")
+```
+
+```{python}
+#| echo: false
+#| fig-cap: "SHAP attribution for Loudoun County, VA — the top-ranked county globally."
+ck = "Virginia||Loudoun County"
+sv1_row = shap_df.loc[ck, s1_cols].values.astype(float)
+sv2_row = shap_df.loc[ck, s2_cols].values.astype(float)
+
+fig = go.Figure()
+for sv, feats, name, color_pos, color_neg in [
+    (sv1_row, s1_feats, "Stage 1 — Presence", "#ef5350", "#42a5f5"),
+    (sv2_row, s2_feats, "Stage 2 — Scale",    "#e53935", "#1565c0"),
+]:
+    idx = np.argsort(np.abs(sv))[-10:]
+    y = [feats[i] for i in idx]
+    x = [float(sv[i]) for i in idx]
+    cols = [color_pos if v > 0 else color_neg for v in x]
+    fig.add_trace(go.Bar(
+        name=name, x=x, y=y, orientation="h",
+        marker_color=cols,
+        hovertemplate="%{y}: %{x:.4f}<extra></extra>",
+    ))
+
+fig.update_layout(
+    barmode="overlay", plot_bgcolor="white", paper_bgcolor="white",
+    margin=dict(l=10, r=10, t=30, b=10), height=420,
+    xaxis_title="SHAP value", legend=dict(orientation="h", yanchor="bottom", y=1.02),
+    xaxis=dict(showgrid=True, gridcolor="#eee"),
+)
+fig.add_vline(x=0, line_width=1, line_color="#444")
+fig.show()
+```

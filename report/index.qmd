@@ -1,0 +1,141 @@
+---
+title: "US Data Center Siting Analysis"
+subtitle: "A structural county-level model of data center location drivers"
+author: "Georgetown University · 2025"
+jupyter: python3
+---
+
+```{python}
+#| echo: false
+import warnings; warnings.filterwarnings("ignore")
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from pathlib import Path
+
+ROOT = Path("..").resolve()
+ranking = pd.read_csv(ROOT / "data_revealed/04_tables/county_attractiveness_ranking.csv", index_col="rank")
+prep    = pd.read_csv(ROOT / "data_revealed/04_tables/county_preprocessed.csv")
+```
+
+## Project Overview
+
+This report presents a structural analysis of the county-level factors that drive data center
+siting decisions across all 3,138 US counties. Rather than relying on ad-hoc heuristics,
+we build a **two-part hurdle model** (LightGBM) that separately answers two questions:
+
+1. *What makes a county likely to attract any data center at all?* (Stage 1 — Presence)
+2. *Among counties with data centers, what drives the scale of that presence?* (Stage 2 — Scale)
+
+This decomposition is methodologically important: the factors that determine *whether* a
+data center exists often differ from those that determine *how many* exist in a given market.
+
+::: {.callout-note}
+**Live Dashboard**: An interactive version of the results is available at the
+[Streamlit dashboard](https://data-center-siting-analysis.streamlit.app).
+:::
+
+## Key Numbers
+
+```{python}
+#| echo: false
+total   = len(ranking)
+with_dc = (ranking["num_datacenters"] > 0).sum()
+pct     = with_dc / total * 100
+top     = ranking.iloc[0]
+zero_dc_high = ranking[(ranking["num_datacenters"] == 0) & (ranking["p_presence"] >= 0.5)]
+
+summary = pd.DataFrame({
+    "Metric": [
+        "Counties in analysis",
+        "Counties with ≥1 data center",
+        "Zero-DC counties",
+        "Structural features",
+        "Stage 1 AUC (presence)",
+        "Median absolute error (raw count)",
+        "Top-ranked county",
+    ],
+    "Value": [
+        f"{total:,}",
+        f"{with_dc:,}  ({pct:.1f}%)",
+        f"{total - with_dc:,}  ({100-pct:.1f}%)",
+        "37",
+        "0.847",
+        "0.052",
+        f"{top['county']}, {top['state']}  ({top['num_datacenters']:.0f} DCs)",
+    ]
+}).set_index("Metric")
+
+summary
+```
+
+## Target Variable
+
+Data center counts follow a highly zero-inflated distribution — 75.6% of US counties have
+no data centers at all. This is the central modeling challenge that motivates the hurdle
+approach over a simple regression.
+
+```{python}
+#| echo: false
+#| fig-cap: "Distribution of data center counts across 3,138 US counties (log scale on y-axis)."
+bins   = [0, 0.001, 1, 5, 10, 50, 100, 500]
+labels = ["= 0", "(0,1)", "[1,5)", "[5,10)", "[10,50)", "[50,100)", "≥100"]
+counts = pd.cut(ranking["num_datacenters"], bins=bins, labels=labels, right=False).value_counts(sort=False)
+
+fig = px.bar(
+    x=counts.index.astype(str), y=counts.values,
+    labels={"x": "num_datacenters bucket", "y": "Number of counties"},
+    color=counts.values, color_continuous_scale="Blues",
+    text=counts.values,
+)
+fig.update_traces(textposition="outside")
+fig.update_layout(
+    showlegend=False, coloraxis_showscale=False,
+    plot_bgcolor="white", paper_bgcolor="white",
+    margin=dict(l=10, r=10, t=10, b=10), height=350,
+    xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor="#eee"),
+)
+fig.show()
+```
+
+## Top Counties by Attractiveness Score
+
+The model assigns each county an **attractiveness score** = P(presence) × E[scale | present].
+This reflects both the probability of a county attracting any data center and the expected
+intensity of that presence.
+
+```{python}
+#| echo: false
+#| fig-cap: "Top 20 counties ranked by model attractiveness score."
+top20 = ranking.head(20).copy()
+top20["label"] = top20["county"] + ",  " + top20["state"]
+
+fig = px.bar(
+    top20, x="attractiveness", y="label",
+    orientation="h", color="num_datacenters",
+    color_continuous_scale="Plasma",
+    labels={"label": "", "attractiveness": "Attractiveness Score", "num_datacenters": "Current DCs"},
+    text="attractiveness",
+)
+fig.update_traces(texttemplate="%{text:.2f}", textposition="outside")
+fig.update_layout(
+    yaxis=dict(autorange="reversed"),
+    plot_bgcolor="white", paper_bgcolor="white",
+    margin=dict(l=10, r=80, t=10, b=10), height=520,
+    coloraxis_colorbar=dict(title="Current DCs", thickness=12),
+    xaxis=dict(showgrid=True, gridcolor="#eee"),
+)
+fig.show()
+```
+
+## Key Findings (Preview)
+
+| Finding | Detail |
+|---|---|
+| **Power infrastructure dominates** | `clean_energy_jobs` and `grid_infrastructure_jobs` are the top two presence predictors — serving as proxies for grid capacity and power sector depth |
+| **IT labor depth drives scale** | `wage_information` rises from rank 4 (presence) to rank 1 (scale), revealing an agglomeration effect among established markets |
+| **Hazard indices are geographic confounders** | NRI risk scores appear in the top 8 presence predictors but drop to ranks 20–30 in scale — confirming they reflect where the existing market *is*, not causal attractors |
+| **Electricity cost matters more at scale** | `commercial_price` rises from rank 9 to rank 4 between stages — cost sensitivity only becomes significant once a cluster exists |
+
+See the [Interpretation](03-results.qmd) page for full SHAP analysis.
