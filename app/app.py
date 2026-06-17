@@ -157,7 +157,7 @@ if page == "📊 Overview":
             "Option 1 — Tweedie": [1.756, 0.312, 0.474, 0.807, 0.185],
             "Option 2 — Hurdle ✓": [1.965, 0.279, 0.524, 0.833, 0.052],
         }).set_index("Metric")
-        st.dataframe(perf, use_container_width=True)
+        st.dataframe(perf, width="stretch")
         st.caption(
             "Option 2 (Hurdle) is the primary model: +2.6 pp AUC and 4× lower "
             "median absolute error, at the cost of slightly higher RMSE."
@@ -181,7 +181,7 @@ if page == "📊 Overview":
             margin=dict(l=10, r=10, t=10, b=10),
             height=280, plot_bgcolor="white", paper_bgcolor="white",
         )
-        st.plotly_chart(fig_dist, use_container_width=True)
+        st.plotly_chart(fig_dist, width="stretch")
         st.caption("76.1% of counties have zero data centers — the defining modeling challenge.")
 
     st.markdown("---")
@@ -192,7 +192,7 @@ if page == "📊 Overview":
     with col_a:
         st.markdown("**Stage 1 — What drives PRESENCE?**")
         findings_s1 = pd.DataFrame({
-            "Rank": [1, 2, 3, 4, "5–8"],
+            "Rank": ["1", "2", "3", "4", "5–8"],
             "Feature": [
                 "clean_energy_jobs",
                 "grid_infrastructure_jobs",
@@ -208,12 +208,12 @@ if page == "📊 Overview":
                 "⚠️ Geographic confounders — not causal",
             ],
         }).set_index("Rank")
-        st.dataframe(findings_s1, use_container_width=True)
+        st.dataframe(findings_s1, width="stretch")
 
     with col_b:
         st.markdown("**Stage 2 — What drives SCALE?**")
         findings_s2 = pd.DataFrame({
-            "Rank": [1, 2, 3, 4, "5+"],
+            "Rank": ["1", "2", "3", "4", "5+"],
             "Feature": [
                 "wage_information",
                 "grid_infrastructure_jobs",
@@ -229,7 +229,7 @@ if page == "📊 Overview":
                 "Largely disappear (confounding confirmed)",
             ],
         }).set_index("Rank")
-        st.dataframe(findings_s2, use_container_width=True)
+        st.dataframe(findings_s2, width="stretch")
 
     st.info(
         "**Key insight**: Hazard risk indices (lightning, hurricane, tornado) appear as top "
@@ -306,7 +306,7 @@ elif page == "🗺️ National Map":
         geo=dict(bgcolor="rgba(0,0,0,0)"),
         height=580,
     )
-    st.plotly_chart(fig_map, use_container_width=True)
+    st.plotly_chart(fig_map, width="stretch")
     st.caption(f"Showing {len(plot_df):,} counties.")
 
 
@@ -384,7 +384,7 @@ elif page == "🔍 County Explorer":
                     "Stage 1 — Presence drivers<br>"
                     "<sup>Impact on log-odds P(has DC) — top 15 by |SHAP|</sup>",
                 ),
-                use_container_width=True,
+                width="stretch",
             )
         with col_r:
             st.plotly_chart(
@@ -393,7 +393,7 @@ elif page == "🔍 County Explorer":
                     "Stage 2 — Scale drivers<br>"
                     "<sup>Impact on log E[count | DC present] — top 15 by |SHAP|</sup>",
                 ),
-                use_container_width=True,
+                width="stretch",
             )
 
         # Feature value table
@@ -411,7 +411,7 @@ elif page == "🔍 County Explorer":
                 feat_df = feat_df.sort_values("Abs SHAP (Presence)", ascending=False).drop(
                     columns="Abs SHAP (Presence)"
                 ).set_index("Feature")
-                st.dataframe(feat_df, use_container_width=True)
+                st.dataframe(feat_df, width="stretch")
 
     # ── Compare to similar counties ──
     st.markdown("---")
@@ -427,7 +427,7 @@ elif page == "🔍 County Explorer":
         sim_df   = ranking[ranking["county_key"].isin(sim_keys)][
             ["county", "state", "num_datacenters", "p_presence", "attractiveness"]
         ].round(3)
-        st.dataframe(sim_df.set_index("county"), use_container_width=True)
+        st.dataframe(sim_df.set_index("county"), width="stretch")
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -489,7 +489,7 @@ elif page == "🌱 Emerging Markets":
         paper_bgcolor="white",
         coloraxis_colorbar=dict(title="P(presence)", thickness=12, len=0.6),
     )
-    st.plotly_chart(fig_em, use_container_width=True)
+    st.plotly_chart(fig_em, width="stretch")
 
     # ── Full table ──
     st.subheader("Full ranking table")
@@ -507,7 +507,7 @@ elif page == "🌱 Emerging Markets":
         display.style
             .background_gradient(subset=["P(presence)", "Score"], cmap="YlOrRd")
             .format({"P(presence)": "{:.3f}", "E[scale]": "{:.2f}", "Score": "{:.3f}"}),
-        use_container_width=True,
+        width="stretch",
         height=550,
     )
 
