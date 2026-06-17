@@ -4,7 +4,6 @@ Run from repo root: streamlit run app/app.py
 """
 
 import json
-import urllib.request
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -12,8 +11,6 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import joblib
-import shap
 import streamlit as st
 from pathlib import Path
 
@@ -47,21 +44,16 @@ def load_preprocessed():
     return df, feat_cols
 
 
-@st.cache_resource
-def load_models():
-    obj = joblib.load(ROOT / "models/option2_hurdle.joblib")
-    stage1 = obj["stage1"]
-    stage2 = obj["stage2"]
-    e1 = shap.TreeExplainer(stage1)
-    e2 = shap.TreeExplainer(stage2)
-    return stage1, stage2, e1, e2
+@st.cache_data
+def load_shap():
+    df = pd.read_csv(ROOT / "data_revealed/04_tables/shap_values.csv")
+    return df.set_index("county_key")
 
 
 @st.cache_data
-def fetch_geojson():
-    url = "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"
-    with urllib.request.urlopen(url, timeout=15) as r:
-        return json.loads(r.read())
+def load_geojson():
+    with open(ROOT / "app/counties.geojson") as f:
+        return json.load(f)
 
 
 # ── SHAP bar chart helper ────────────────────────────────────────────────────
@@ -92,9 +84,15 @@ def shap_bar(shap_vals, feature_names, title, top_n=15):
 
 # ── Load data ────────────────────────────────────────────────────────────────
 
-ranking           = load_ranking()
+ranking            = load_ranking()
 prep_df, FEAT_COLS = load_preprocessed()
-stage1, stage2, e1, e2 = load_models()
+shap_df            = load_shap()
+
+# Derive feature name lists from SHAP CSV columns (strips "s1_" / "s2_" prefix)
+_s1_cols  = [c for c in shap_df.columns if c.startswith("s1_")]
+_s2_cols  = [c for c in shap_df.columns if c.startswith("s2_")]
+S1_FEATS  = [c[3:] for c in _s1_cols]
+S2_FEATS  = [c[3:] for c in _s2_cols]
 
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
@@ -283,39 +281,34 @@ elif page == "🗺️ National Map":
     color_vals = np.log1p(plot_df[color_col]) if log_scale else plot_df[color_col]
     color_label = f"log1p({color_col})" if log_scale else color_col
 
-    with st.spinner("Loading county boundaries…"):
-        try:
-            geojson = fetch_geojson()
-            fig_map = px.choropleth(
-                plot_df.assign(_c=color_vals),
-                geojson=geojson,
-                locations="fips_str",
-                color="_c",
-                color_continuous_scale="Plasma",
-                scope="usa",
-                hover_name="county",
-                hover_data={
-                    "state":           True,
-                    "num_datacenters": ":.1f",
-                    "p_presence":      ":.3f",
-                    "expected_scale":  ":.2f",
-                    "attractiveness":  ":.3f",
-                    "fips_str":        False,
-                    "_c":              False,
-                },
-                labels={"_c": color_label},
-            )
-            fig_map.update_layout(
-                margin={"r": 0, "t": 0, "l": 0, "b": 0},
-                coloraxis_colorbar=dict(title=color_label, thickness=14, len=0.7),
-                geo=dict(bgcolor="rgba(0,0,0,0)"),
-                height=580,
-            )
-            st.plotly_chart(fig_map, use_container_width=True)
-            st.caption(f"Showing {len(plot_df):,} counties.")
-        except Exception as exc:
-            st.error(f"Could not load map: {exc}")
-            st.dataframe(plot_df[["county", "state", color_col]].head(20))
+    geojson = load_geojson()
+    fig_map = px.choropleth(
+        plot_df.assign(_c=color_vals),
+        geojson=geojson,
+        locations="fips_str",
+        color="_c",
+        color_continuous_scale="Plasma",
+        scope="usa",
+        hover_name="county",
+        hover_data={
+            "state":           True,
+            "num_datacenters": ":.1f",
+            "p_presence":      ":.3f",
+            "expected_scale":  ":.2f",
+            "attractiveness":  ":.3f",
+            "fips_str":        False,
+            "_c":              False,
+        },
+        labels={"_c": color_label},
+    )
+    fig_map.update_layout(
+        margin={"r": 0, "t": 0, "l": 0, "b": 0},
+        coloraxis_colorbar=dict(title=color_label, thickness=14, len=0.7),
+        geo=dict(bgcolor="rgba(0,0,0,0)"),
+        height=580,
+    )
+    st.plotly_chart(fig_map, use_container_width=True)
+    st.caption(f"Showing {len(plot_df):,} counties.")
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -377,31 +370,18 @@ elif page == "🔍 County Explorer":
     )
 
     county_key = f"{sel_state}||{sel_county}"
-    prep_row   = prep_df[prep_df["county_key"] == county_key]
 
-    if prep_row.empty:
-        st.warning("No preprocessed data found for this county.")
+    if county_key not in shap_df.index:
+        st.warning("No SHAP data found for this county.")
     else:
-        X_row = prep_row[FEAT_COLS].values  # shape (1, 37)
-
-        with st.spinner("Computing SHAP values…"):
-            # Stage 1
-            sv1 = e1.shap_values(X_row)
-            if isinstance(sv1, list):
-                sv1 = sv1[1]
-            sv1_flat = np.array(sv1[0], dtype=float)
-
-            # Stage 2
-            sv2 = e2.shap_values(X_row)
-            if isinstance(sv2, list):
-                sv2 = sv2[1]
-            sv2_flat = np.array(sv2[0], dtype=float)
+        sv1_flat = shap_df.loc[county_key, _s1_cols].values.astype(float)
+        sv2_flat = shap_df.loc[county_key, _s2_cols].values.astype(float)
 
         col_l, col_r = st.columns(2)
         with col_l:
             st.plotly_chart(
                 shap_bar(
-                    sv1_flat, FEAT_COLS,
+                    sv1_flat, S1_FEATS,
                     "Stage 1 — Presence drivers<br>"
                     "<sup>Impact on log-odds P(has DC) — top 15 by |SHAP|</sup>",
                 ),
@@ -410,7 +390,7 @@ elif page == "🔍 County Explorer":
         with col_r:
             st.plotly_chart(
                 shap_bar(
-                    sv2_flat, FEAT_COLS,
+                    sv2_flat, S2_FEATS,
                     "Stage 2 — Scale drivers<br>"
                     "<sup>Impact on log E[count | DC present] — top 15 by |SHAP|</sup>",
                 ),
@@ -419,17 +399,20 @@ elif page == "🔍 County Explorer":
 
         # Feature value table
         with st.expander("📋 Full feature values and SHAP scores"):
-            feat_df = pd.DataFrame({
-                "Feature":         FEAT_COLS,
-                "Value":           X_row[0].round(4),
-                "SHAP — Presence": sv1_flat.round(4),
-                "SHAP — Scale":    sv2_flat.round(4),
-            })
-            feat_df["Abs SHAP (Presence)"] = np.abs(sv1_flat)
-            feat_df = feat_df.sort_values("Abs SHAP (Presence)", ascending=False).drop(
-                columns="Abs SHAP (Presence)"
-            ).set_index("Feature")
-            st.dataframe(feat_df, use_container_width=True)
+            prep_row = prep_df[prep_df["county_key"] == county_key]
+            if not prep_row.empty:
+                X_row = prep_row[FEAT_COLS].values[0]
+                feat_df = pd.DataFrame({
+                    "Feature":         S1_FEATS,
+                    "Value":           X_row.round(4),
+                    "SHAP — Presence": sv1_flat.round(4),
+                    "SHAP — Scale":    sv2_flat.round(4),
+                })
+                feat_df["Abs SHAP (Presence)"] = np.abs(sv1_flat)
+                feat_df = feat_df.sort_values("Abs SHAP (Presence)", ascending=False).drop(
+                    columns="Abs SHAP (Presence)"
+                ).set_index("Feature")
+                st.dataframe(feat_df, use_container_width=True)
 
     # ── Compare to similar counties ──
     st.markdown("---")
