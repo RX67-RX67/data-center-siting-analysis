@@ -1,0 +1,226 @@
+[
+  {
+    "objectID": "02-modeling.html",
+    "href": "02-modeling.html",
+    "title": "Modeling Approach",
+    "section": "",
+    "text": "The target variable — county-level data center count — violates the assumptions of standard regression in two compounding ways:\n\nZero-inflation: 75.6% of counties have exactly zero data centers. A regression trained on all counties conflates two fundamentally different groups: counties that could attract a DC but haven’t, and counties that are structurally unsuitable.\nRight skew + overdispersion: Among positive counties, counts range from &lt;1 to 304, with variance far exceeding the mean. Standard OLS residuals would be severely heteroscedastic.\n\nThese two problems motivate different solutions, which led us to evaluate two model families."
+  },
+  {
+    "objectID": "02-modeling.html#why-not-a-simple-regression",
+    "href": "02-modeling.html#why-not-a-simple-regression",
+    "title": "Modeling Approach",
+    "section": "",
+    "text": "The target variable — county-level data center count — violates the assumptions of standard regression in two compounding ways:\n\nZero-inflation: 75.6% of counties have exactly zero data centers. A regression trained on all counties conflates two fundamentally different groups: counties that could attract a DC but haven’t, and counties that are structurally unsuitable.\nRight skew + overdispersion: Among positive counties, counts range from &lt;1 to 304, with variance far exceeding the mean. Standard OLS residuals would be severely heteroscedastic.\n\nThese two problems motivate different solutions, which led us to evaluate two model families."
+  },
+  {
+    "objectID": "02-modeling.html#option-1-tweedie-regression",
+    "href": "02-modeling.html#option-1-tweedie-regression",
+    "title": "Modeling Approach",
+    "section": "Option 1 — Tweedie Regression",
+    "text": "Option 1 — Tweedie Regression\nThe Tweedie distribution with power parameter p ∈ (1, 2) is a compound Poisson-Gamma that naturally handles zero-inflation and overdispersion in a single model. It directly models E[y] with a log link, treating zeros as a structural outcome.\nKey hyperparameter: the Tweedie power p, tuned via cross-validation.\n\n\n        \n        \n        \n\n\n                            \n                                            \n\n\nBest p = 1.3 (closer to Poisson than Gamma), reflecting that the zero mass is the dominant challenge over heavy-tail scaling."
+  },
+  {
+    "objectID": "02-modeling.html#option-2-two-part-hurdle-model",
+    "href": "02-modeling.html#option-2-two-part-hurdle-model",
+    "title": "Modeling Approach",
+    "section": "Option 2 — Two-Part Hurdle Model ✓",
+    "text": "Option 2 — Two-Part Hurdle Model ✓\nThe hurdle model explicitly separates the two questions:\n\nE[y] = \\underbrace{P(y &gt; 0)}_{\\text{Stage 1}} \\times \\underbrace{E[y \\mid y &gt; 0]}_{\\text{Stage 2}}\n\nStage 1 — Binary Classifier (LightGBM, is_unbalance=True): Predicts whether a county has any data center presence. Trained on all 3,138 counties.\nStage 2 — Tweedie Regressor (LightGBM, Tweedie p tuned): Predicts the expected count given presence. Trained only on the 767 counties with at least one data center.\nThis decomposition is both statistically principled and interpretively richer: we get separate SHAP explanations for the presence decision and the scale decision.\n\nfrom lightgbm import LGBMClassifier, LGBMRegressor\n\n# Stage 1 — presence\nstage1 = LGBMClassifier(\n    n_estimators=1000, learning_rate=0.05, num_leaves=63,\n    is_unbalance=True,          # handles 76% zero class imbalance\n    early_stopping_rounds=50,\n)\nstage1.fit(X_train, y_binary_train, eval_set=[(X_val, y_binary_val)])\n\n# Stage 2 — scale (positive counties only)\nstage2 = LGBMRegressor(\n    objective=\"tweedie\", tweedie_variance_power=best_p,\n    n_estimators=1000, learning_rate=0.05, num_leaves=63,\n    early_stopping_rounds=50,\n)\nstage2.fit(X_pos_train, y_pos_train, eval_set=[(X_pos_val, y_pos_val)])\n\n\nHyperparameter Tuning\nBoth stages used Optuna for Bayesian hyperparameter optimization (50 trials each), with 5-fold cross-validation as the objective. Key parameters tuned: num_leaves, learning_rate, min_child_samples, subsample, colsample_bytree, and reg_lambda. Stage 2 also tuned the Tweedie power p.\nStage 2 best p = 1.8 (closer to Gamma), reflecting that among positive counties, the count distribution is heavy-tailed — a handful of markets dominate the landscape."
+  },
+  {
+    "objectID": "02-modeling.html#model-comparison",
+    "href": "02-modeling.html#model-comparison",
+    "title": "Modeling Approach",
+    "section": "Model Comparison",
+    "text": "Model Comparison\n\n\n                            \n                                            \nPerformance comparison across five metrics. Option 2 (Hurdle) wins on four of five.\n\n\n\n\n\n\n\n\n\n\n\nOption 1 — Tweedie\nOption 2 — Hurdle ✓\nWinner\n\n\nMetric\n\n\n\n\n\n\n\nTweedie Deviance ↓\n1.756\n1.965\nTweedie\n\n\nMAE log1p ↓\n0.312\n0.279\nHurdle ✓\n\n\nRMSE log1p ↓\n0.474\n0.524\nTweedie\n\n\nAUC ↑\n0.807\n0.833\nHurdle ✓\n\n\nMedian AE ↓\n0.185\n0.052\nHurdle ✓\n\n\n\n\n\n\n\nThe hurdle model wins on the metrics that matter most for practical application:\n\nAUC +2.6 pp (0.807 → 0.833): better discrimination of DC-present vs absent counties\nMedian AE 3.6× lower (0.185 → 0.052): far more accurate predictions at the median, meaning the model is right more often for typical counties\nMAE (log1p) improvement: better average accuracy in log space\n\nThe Tweedie model wins on Tweedie Deviance (expected, since it directly optimizes that objective) and RMSE (driven by a few large-count outliers that the Tweedie handles better in absolute terms). For siting decisions, discrimination and median accuracy are more actionable than extreme-tail RMSE."
+  },
+  {
+    "objectID": "02-modeling.html#why-is_unbalancetrue-in-stage-1",
+    "href": "02-modeling.html#why-is_unbalancetrue-in-stage-1",
+    "title": "Modeling Approach",
+    "section": "Why is_unbalance=True in Stage 1?",
+    "text": "Why is_unbalance=True in Stage 1?\nThe binary classification target in Stage 1 is 76.2% negative (no DC present). Without correction, LightGBM would learn a trivial solution of predicting “no DC” for most counties. is_unbalance=True automatically adjusts class weights by the inverse frequency ratio, giving the minority class (has DC) proportionally more influence during training.\nAn alternative would be scale_pos_weight, but is_unbalance handles the ratio automatically and showed equivalent results in our cross-validation experiments."
+  },
+  {
+    "objectID": "01-data.html",
+    "href": "01-data.html",
+    "title": "Data Sources & Preprocessing",
+    "section": "",
+    "text": "The analysis draws on seven public data sources, each contributing a distinct dimension of county-level structural capacity. All data is cross-sectional at the county level and reflects conditions circa 2023–2025.\n\n\n\n\n\n\n\n\n\nSource\nProvider\nFeatures Derived\nCounties Covered\n\n\n\n\nGrid & Energy Workforce\nUSEER 2023\nclean_energy_jobs, grid_infrastructure_jobs\n3,143\n\n\nElectricity Prices\nEIA 2023 (IOU zip-level)\ncommercial_price, industrial_price\n3,112\n\n\nBroadband / Internet\nFCC BDC May 2025\nfiber_availability, any_tech_1000_100_coverage\n3,143\n\n\nLabor Costs\nBLS OEWS 2023\nwage_information, wage_computer_math\n~2,800\n\n\nLand Values\nAEI Land Price 2023\nland_value_1_4_acre_standardized\n~2,400\n\n\nTransportation\nBTS / NTAD 2024\nair_connectivity, rail_intensity, dock_presence\n3,143\n\n\nEnvironmental Risk\nFEMA NRI 2023\n12 hazard risk indices\n3,143\n\n\nPolicy Signals\nState legislation (scraped)\npolicy_direction_score\n50 states\n\n\n\n\n\n\n\n\n\nWarning\n\n\n\nConnecticut excluded: In 2022 the Census Bureau replaced Connecticut’s 8 traditional counties with 9 planning regions. The USEER grid data and AEI land price data lack county-level coverage for CT, causing all Connecticut rows to be dropped during the cross-source join."
+  },
+  {
+    "objectID": "01-data.html#data-sources",
+    "href": "01-data.html#data-sources",
+    "title": "Data Sources & Preprocessing",
+    "section": "",
+    "text": "The analysis draws on seven public data sources, each contributing a distinct dimension of county-level structural capacity. All data is cross-sectional at the county level and reflects conditions circa 2023–2025.\n\n\n\n\n\n\n\n\n\nSource\nProvider\nFeatures Derived\nCounties Covered\n\n\n\n\nGrid & Energy Workforce\nUSEER 2023\nclean_energy_jobs, grid_infrastructure_jobs\n3,143\n\n\nElectricity Prices\nEIA 2023 (IOU zip-level)\ncommercial_price, industrial_price\n3,112\n\n\nBroadband / Internet\nFCC BDC May 2025\nfiber_availability, any_tech_1000_100_coverage\n3,143\n\n\nLabor Costs\nBLS OEWS 2023\nwage_information, wage_computer_math\n~2,800\n\n\nLand Values\nAEI Land Price 2023\nland_value_1_4_acre_standardized\n~2,400\n\n\nTransportation\nBTS / NTAD 2024\nair_connectivity, rail_intensity, dock_presence\n3,143\n\n\nEnvironmental Risk\nFEMA NRI 2023\n12 hazard risk indices\n3,143\n\n\nPolicy Signals\nState legislation (scraped)\npolicy_direction_score\n50 states\n\n\n\n\n\n\n\n\n\nWarning\n\n\n\nConnecticut excluded: In 2022 the Census Bureau replaced Connecticut’s 8 traditional counties with 9 planning regions. The USEER grid data and AEI land price data lack county-level coverage for CT, causing all Connecticut rows to be dropped during the cross-source join."
+  },
+  {
+    "objectID": "01-data.html#target-variable-construction",
+    "href": "01-data.html#target-variable-construction",
+    "title": "Data Sources & Preprocessing",
+    "section": "Target Variable Construction",
+    "text": "Target Variable Construction\nThe target variable — number of data centers per county — was constructed by geocoding a proprietary database of US data center locations to county FIPS codes, then aggregating counts. Fractional counts arise from facilities that span county lines (allocated by area overlap).\n\n\n\n\n\n\n\n\n\nValue\n\n\nStatistic\n\n\n\n\n\nCount\n3,138\n\n\nMean\n1.388\n\n\nMedian\n0.000\n\n\nStd Dev\n8.462\n\n\nMax\n304.0\n\n\n% Zero\n75.6%\n\n\n% &gt; 10\n3.3%\n\n\n% &gt; 100\n0.2%\n\n\n\n\n\nTarget variable statistics. The extreme right skew motivates log1p transformation during modeling."
+  },
+  {
+    "objectID": "01-data.html#feature-engineering",
+    "href": "01-data.html#feature-engineering",
+    "title": "Data Sources & Preprocessing",
+    "section": "Feature Engineering",
+    "text": "Feature Engineering\nAfter merging all sources on county FIPS, 37 structural features were retained. Several features required non-trivial engineering choices:\n\nBEA Data Suppression Floors\nThe Bureau of Economic Analysis suppresses small cell values to protect privacy. Three energy-related features are heavily affected:\n\n\n\n\n\n\n\n\n\nSuppression Floor\n% at Floor\nImplication\n\n\nFeature\n\n\n\n\n\n\n\nepg_natural_gas\n5\n76.5%\nMostly uninformative — reflects suppression, n...\n\n\nclean_energy_jobs\n15\n47.9%\nNearly half of counties are at the floor\n\n\ngrid_infrastructure_jobs\n20\n15.9%\nModerate suppression — still useful for rankings\n\n\n\n\n\n\n\nSuppression indicator flags (*_above_floor) were added as binary features to allow the model to distinguish true low values from suppressed ones. This means SHAP values for these features should be interpreted carefully — a negative SHAP is often driven by the county being at the suppression floor rather than genuinely having low activity.\n\n\nElectricity Price Aggregation\nEIA electricity prices are reported at the utility zip code level. The pipeline aggregates to county level by:\n\nMapping zip codes to counties via the ZCTA crosswalk\nComputing a population-weighted average for counties with multiple utility territories\nSeparately retaining commercial (commercial_price) and industrial (industrial_price) rates\n\n\n\nPolicy Direction Score\nState-level data center policy stances were scraped from legislative databases and classified on a scale of −1 (hostile) to +1 (supportive) using GPT-4 assistance, then validated manually. This feature is assigned uniformly to all counties within a state."
+  },
+  {
+    "objectID": "01-data.html#feature-correlation-structure",
+    "href": "01-data.html#feature-correlation-structure",
+    "title": "Data Sources & Preprocessing",
+    "section": "Feature Correlation Structure",
+    "text": "Feature Correlation Structure\n\n\n        \n        \n        \nPearson correlation matrix for a subset of key structural features.\n\n\n                            \n                                            \n\n\nNotable correlations:\n\nclean_energy_jobs and grid_infrastructure_jobs are strongly correlated (r ≈ 0.75) — both capture power sector depth and will compete for SHAP attribution.\nwage_information correlates moderately with num_datacenters (r ≈ 0.45) — the agglomeration signal visible even in raw correlations.\nElectricity prices (commercial_price, industrial_price) show weak raw correlation with DC counts, but emerge as important at scale in the Stage 2 model."
+  },
+  {
+    "objectID": "01-data.html#preprocessing-pipeline",
+    "href": "01-data.html#preprocessing-pipeline",
+    "title": "Data Sources & Preprocessing",
+    "section": "Preprocessing Pipeline",
+    "text": "Preprocessing Pipeline\n\n# Simplified view of the preprocessing steps\ndf = merge_all_sources(on=\"county_fips\")   # left-join across 7 sources\ndf = drop_counties_with_missing_core(df)   # requires grid + land price data\ndf = add_suppression_flags(df)             # *_above_floor binary indicators\ndf = log1p_transform(df, skewed_cols)      # right-skewed count features\ndf = standardize(df, price_cols)           # z-score for price features\ndf = fill_missing(df, strategy=\"median\")   # remaining NaN → column median\n\nThe final preprocessed dataset contains {n_counties:,} counties × {n_feats} features before modeling.\n\n\nFinal dataset: 3,138 counties × 37 features\nTarget range: [0.0, 304.0]\nPositive rate: 24.4%"
+  },
+  {
+    "objectID": "03-results.html",
+    "href": "03-results.html",
+    "title": "Model Interpretation",
+    "section": "",
+    "text": "We use SHAP (SHapley Additive exPlanations) with TreeExplainer for exact SHAP values — not approximations. SHAP assigns each feature a contribution to the model’s output for each individual county, with the sum of contributions equaling the difference between the county’s prediction and the global mean prediction.\n\nf(x) = \\phi_0 + \\sum_{j=1}^{p} \\phi_j\n\nwhere \\phi_0 is the base value (mean prediction) and \\phi_j is feature j’s SHAP contribution. Positive SHAP → pushes prediction up; negative SHAP → pushes down.\nAll 3,138 county SHAP values were pre-computed and stored for efficient lookup."
+  },
+  {
+    "objectID": "03-results.html#shap-framework",
+    "href": "03-results.html#shap-framework",
+    "title": "Model Interpretation",
+    "section": "",
+    "text": "We use SHAP (SHapley Additive exPlanations) with TreeExplainer for exact SHAP values — not approximations. SHAP assigns each feature a contribution to the model’s output for each individual county, with the sum of contributions equaling the difference between the county’s prediction and the global mean prediction.\n\nf(x) = \\phi_0 + \\sum_{j=1}^{p} \\phi_j\n\nwhere \\phi_0 is the base value (mean prediction) and \\phi_j is feature j’s SHAP contribution. Positive SHAP → pushes prediction up; negative SHAP → pushes down.\nAll 3,138 county SHAP values were pre-computed and stored for efficient lookup."
+  },
+  {
+    "objectID": "03-results.html#global-feature-importance-stage-1-presence",
+    "href": "03-results.html#global-feature-importance-stage-1-presence",
+    "title": "Model Interpretation",
+    "section": "Global Feature Importance — Stage 1 (Presence)",
+    "text": "Global Feature Importance — Stage 1 (Presence)\nMean |SHAP| across all counties ranks features by their average contribution to the presence probability. This is the model’s answer to: “What structural factors most determine whether a county attracts any data center?”\n\n\n        \n        \n        \nStage 1 mean |SHAP| — feature importance for P(has DC). Top 20 features shown."
+  },
+  {
+    "objectID": "03-results.html#global-feature-importance-stage-2-scale",
+    "href": "03-results.html#global-feature-importance-stage-2-scale",
+    "title": "Model Interpretation",
+    "section": "Global Feature Importance — Stage 2 (Scale)",
+    "text": "Global Feature Importance — Stage 2 (Scale)\nAmong counties that already have data centers, what drives the count? Stage 2 answers this on the positive subset, revealing a different hierarchy.\n\n\n                            \n                                            \nStage 2 mean |SHAP| — feature importance for E[count | DC present]. Top 20 features shown."
+  },
+  {
+    "objectID": "03-results.html#stage-1-vs-stage-2-rank-shift-analysis",
+    "href": "03-results.html#stage-1-vs-stage-2-rank-shift-analysis",
+    "title": "Model Interpretation",
+    "section": "Stage 1 vs Stage 2 — Rank Shift Analysis",
+    "text": "Stage 1 vs Stage 2 — Rank Shift Analysis\nThe two stages ask fundamentally different questions. Comparing feature ranks between them reveals which factors drive entry vs clustering.\n\n\n                            \n                                            \nFeature rank in Stage 1 vs Stage 2 (by mean |SHAP|). Lines show rank movement between stages.\n\n\n\n\n\n\n\n\n\n\n\nStage 1 Rank\nStage 2 Rank\nRank Change (↑ = rises in S2)\n\n\nFeature\n\n\n\n\n\n\n\nclean_energy_jobs\n1\n3\n-2\n\n\ngrid_infrastructure_jobs\n2\n1\n1\n\n\nland_value_1_4_acre_standardized\n3\n7\n-4\n\n\nwage_information\n4\n2\n2\n\n\nlightning_risk_index_value\n5\n9\n-4\n\n\ntornado_risk_index_value\n6\n8\n-2\n\n\nhurricane_risk_index_value\n7\n29\n-22\n\n\nheat_wave_risk_index_value\n8\n22\n-14\n\n\ncommercial_price\n9\n4\n5\n\n\nwildfire_risk_index_value\n10\n16\n-6\n\n\ncold_wave_risk_index_value\n11\n30\n-19\n\n\nearthquake_risk_index_value\n12\n21\n-9\n\n\nwage_prof_business\n13\n19\n-6\n\n\nrail_intensity\n14\n13\n1\n\n\nstrong_wind_risk_index_value\n15\n26\n-11"
+  },
+  {
+    "objectID": "03-results.html#key-interpretive-findings",
+    "href": "03-results.html#key-interpretive-findings",
+    "title": "Model Interpretation",
+    "section": "Key Interpretive Findings",
+    "text": "Key Interpretive Findings\n\n1. Power Infrastructure as the Entry Gate\nclean_energy_jobs (rank 1, S1) and grid_infrastructure_jobs (rank 2, S1) are the two strongest presence predictors. These are not directly measuring power availability but rather the depth of the power sector workforce — a proxy for grid capacity, interconnection maturity, and the density of utility infrastructure needed to serve a hyperscale campus.\nThis aligns with industry reporting: power access (not just price) is consistently cited as the top constraint on new data center development.\n\n\n2. The Agglomeration Signal in wage_information\nwage_information — the average wage in information-sector occupations — rises from rank 4 in Stage 1 to rank 1 in Stage 2. This is the clearest agglomeration signal in the model:\n\nAt the presence stage, IT labor is important but secondary to power infrastructure\nAt the scale stage, it becomes the dominant factor — established markets attract more facilities because they’ve already built deep IT talent pools\n\nThis is consistent with the “tech cluster” dynamic: once a few large operators anchor in a metro, the labor market deepens, which attracts more operators, reinforcing the cluster.\n\n\n3. Geographic Confounding in Hazard Risk Indices\nNRI hazard risk indices (lightning, hurricane, tornado, earthquake) appear in the top 8 Stage 1 predictors but fall to ranks 20–30 in Stage 2. This pattern is diagnostic of geographic confounding:\nThe existing US data center market is concentrated in Virginia (high lightning risk), Texas (hurricane/tornado risk), and Georgia (coastal storm risk). The model learns this geographic correlation in Stage 1. But once we condition on positive counties in Stage 2, the hazard indices lose predictive power — confirming they are proxies for where the market already is, not genuine attractors.\n\n\n\n\n\n\nImportant\n\n\n\nPolicy implication: Hazard risk should not be used as a site selection criterion based on this model. Counties with lower hazard risk are not inherently less attractive — the observed correlation reflects historical accident, not structural causation.\n\n\n\n\n4. Electricity Cost Sensitivity at Scale\ncommercial_price rises from rank 9 (S1) to rank 4 (S2). Cost sensitivity is a scale-dependent phenomenon: small operators may accept above-market power costs if other factors (labor, land, connectivity) are favorable, but hyperscale campuses consuming 100s of MW are acutely sensitive to cents-per-kWh differences."
+  },
+  {
+    "objectID": "03-results.html#county-deep-dive-top-3-profiles",
+    "href": "03-results.html#county-deep-dive-top-3-profiles",
+    "title": "Model Interpretation",
+    "section": "County Deep Dive — Top 3 Profiles",
+    "text": "County Deep Dive — Top 3 Profiles\n\n\n\n============================================================\n#1 Loudoun County, VA\n  DCs: 304.0  |  P(presence): 0.988  |  Score: 19.651\n\n============================================================\n#4 Travis County, TX\n  DCs: 24.4  |  P(presence): 0.999  |  Score: 16.721\n\n============================================================\n#80 New Hanover County, NC (zero DC)\n  DCs: 0.0  |  P(presence): 0.954  |  Score: 8.755\n\n\n\n\n                            \n                                            \nSHAP attribution for Loudoun County, VA — the top-ranked county globally."
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "US Data Center Siting Analysis",
+    "section": "",
+    "text": "This report presents a structural analysis of the county-level factors that drive data center siting decisions across all 3,138 US counties. Rather than relying on ad-hoc heuristics, we build a two-part hurdle model (LightGBM) that separately answers two questions:\n\nWhat makes a county likely to attract any data center at all? (Stage 1 — Presence)\nAmong counties with data centers, what drives the scale of that presence? (Stage 2 — Scale)\n\nThis decomposition is methodologically important: the factors that determine whether a data center exists often differ from those that determine how many exist in a given market.\n\n\n\n\n\n\nNote\n\n\n\nLive Dashboard: An interactive version of the results is available at the Streamlit dashboard."
+  },
+  {
+    "objectID": "index.html#project-overview",
+    "href": "index.html#project-overview",
+    "title": "US Data Center Siting Analysis",
+    "section": "",
+    "text": "This report presents a structural analysis of the county-level factors that drive data center siting decisions across all 3,138 US counties. Rather than relying on ad-hoc heuristics, we build a two-part hurdle model (LightGBM) that separately answers two questions:\n\nWhat makes a county likely to attract any data center at all? (Stage 1 — Presence)\nAmong counties with data centers, what drives the scale of that presence? (Stage 2 — Scale)\n\nThis decomposition is methodologically important: the factors that determine whether a data center exists often differ from those that determine how many exist in a given market.\n\n\n\n\n\n\nNote\n\n\n\nLive Dashboard: An interactive version of the results is available at the Streamlit dashboard."
+  },
+  {
+    "objectID": "index.html#key-numbers",
+    "href": "index.html#key-numbers",
+    "title": "US Data Center Siting Analysis",
+    "section": "Key Numbers",
+    "text": "Key Numbers\n\n\n\n\n\n\n\n\n\nValue\n\n\nMetric\n\n\n\n\n\nCounties in analysis\n3,138\n\n\nCounties with ≥1 data center\n767 (24.4%)\n\n\nZero-DC counties\n2,371 (75.6%)\n\n\nStructural features\n37\n\n\nStage 1 AUC (presence)\n0.847\n\n\nMedian absolute error (raw count)\n0.052\n\n\nTop-ranked county\nLoudoun County, Virginia (304 DCs)"
+  },
+  {
+    "objectID": "index.html#target-variable",
+    "href": "index.html#target-variable",
+    "title": "US Data Center Siting Analysis",
+    "section": "Target Variable",
+    "text": "Target Variable\nData center counts follow a highly zero-inflated distribution — 75.6% of US counties have no data centers at all. This is the central modeling challenge that motivates the hurdle approach over a simple regression.\n\n\n        \n        \n        \nDistribution of data center counts across 3,138 US counties (log scale on y-axis)."
+  },
+  {
+    "objectID": "index.html#top-counties-by-attractiveness-score",
+    "href": "index.html#top-counties-by-attractiveness-score",
+    "title": "US Data Center Siting Analysis",
+    "section": "Top Counties by Attractiveness Score",
+    "text": "Top Counties by Attractiveness Score\nThe model assigns each county an attractiveness score = P(presence) × E[scale | present]. This reflects both the probability of a county attracting any data center and the expected intensity of that presence.\n\n\n                            \n                                            \nTop 20 counties ranked by model attractiveness score."
+  },
+  {
+    "objectID": "index.html#key-findings-preview",
+    "href": "index.html#key-findings-preview",
+    "title": "US Data Center Siting Analysis",
+    "section": "Key Findings (Preview)",
+    "text": "Key Findings (Preview)\n\n\n\n\n\n\n\nFinding\nDetail\n\n\n\n\nPower infrastructure dominates\nclean_energy_jobs and grid_infrastructure_jobs are the top two presence predictors — serving as proxies for grid capacity and power sector depth\n\n\nIT labor depth drives scale\nwage_information rises from rank 4 (presence) to rank 1 (scale), revealing an agglomeration effect among established markets\n\n\nHazard indices are geographic confounders\nNRI risk scores appear in the top 8 presence predictors but drop to ranks 20–30 in scale — confirming they reflect where the existing market is, not causal attractors\n\n\nElectricity cost matters more at scale\ncommercial_price rises from rank 9 to rank 4 between stages — cost sensitivity only becomes significant once a cluster exists\n\n\n\nSee the Interpretation page for full SHAP analysis."
+  },
+  {
+    "objectID": "04-emerging.html",
+    "href": "04-emerging.html",
+    "title": "Emerging Markets",
+    "section": "",
+    "text": "An emerging market in this context is a county that:\n\nHas zero current data centers (no incumbents to compete with)\nHas high structural attractiveness — the model finds the prerequisite conditions for DC activity already in place\n\nThese are first-mover opportunities: the infrastructure is there, the labor exists, the grid capacity is present — but no operator has yet planted a flag. The model identifies these by the gap between structural readiness and realized investment.\n\n\nZero-DC counties: 2,371\nZero-DC with P(presence) ≥ 0.50: 50  (2.1% of zero-DC)\nZero-DC with P(presence) ≥ 0.75: 32\nZero-DC with P(presence) ≥ 0.90: 16"
+  },
+  {
+    "objectID": "04-emerging.html#what-is-an-emerging-market",
+    "href": "04-emerging.html#what-is-an-emerging-market",
+    "title": "Emerging Markets",
+    "section": "",
+    "text": "An emerging market in this context is a county that:\n\nHas zero current data centers (no incumbents to compete with)\nHas high structural attractiveness — the model finds the prerequisite conditions for DC activity already in place\n\nThese are first-mover opportunities: the infrastructure is there, the labor exists, the grid capacity is present — but no operator has yet planted a flag. The model identifies these by the gap between structural readiness and realized investment.\n\n\nZero-DC counties: 2,371\nZero-DC with P(presence) ≥ 0.50: 50  (2.1% of zero-DC)\nZero-DC with P(presence) ≥ 0.75: 32\nZero-DC with P(presence) ≥ 0.90: 16"
+  },
+  {
+    "objectID": "04-emerging.html#top-30-emerging-markets",
+    "href": "04-emerging.html#top-30-emerging-markets",
+    "title": "Emerging Markets",
+    "section": "Top 30 Emerging Markets",
+    "text": "Top 30 Emerging Markets\n\n\n        \n        \n        \nTop 30 zero-DC counties by attractiveness score, colored by P(presence)."
+  },
+  {
+    "objectID": "04-emerging.html#state-level-concentration",
+    "href": "04-emerging.html#state-level-concentration",
+    "title": "Emerging Markets",
+    "section": "State-Level Concentration",
+    "text": "State-Level Concentration\nWhere are emerging markets geographically concentrated? Some states appear repeatedly in the top emerging county list — suggesting that state-level policy and grid infrastructure create pockets of untapped potential.\n\n\n                            \n                                            \nNumber of high-potential zero-DC counties (P ≥ 0.5) per state."
+  },
+  {
+    "objectID": "04-emerging.html#ppresence-vs-expected-scale-the-opportunity-matrix",
+    "href": "04-emerging.html#ppresence-vs-expected-scale-the-opportunity-matrix",
+    "title": "Emerging Markets",
+    "section": "P(presence) vs Expected Scale — The Opportunity Matrix",
+    "text": "P(presence) vs Expected Scale — The Opportunity Matrix\nNot all emerging markets are equal. The two-part model lets us distinguish:\n\nHigh P, High Scale: structurally ready and likely to see significant activity\nHigh P, Low Scale: likely to attract some activity but probably small deployments\nLow P, High Scale: rare — unlikely to see activity despite high potential scale\n\n\n\n                            \n                                            \nEmerging market opportunity matrix. Point size = attractiveness score. Only zero-DC counties shown."
+  },
+  {
+    "objectID": "04-emerging.html#top-emerging-markets-full-table",
+    "href": "04-emerging.html#top-emerging-markets-full-table",
+    "title": "Emerging Markets",
+    "section": "Top Emerging Markets — Full Table",
+    "text": "Top Emerging Markets — Full Table\n\n\n\n\n\n\n\n\n\nCounty\nState\nP(presence)\nE[scale]\nAttractiveness Score\n\n\nrank\n\n\n\n\n\n\n\n\n\n80\nNew Hanover County\nNorth Carolina\n0.954\n9.18\n8.754\n\n\n96\nMercer County\nNew Jersey\n0.992\n8.25\n8.182\n\n\n108\nSussex County\nDelaware\n0.979\n7.87\n7.707\n\n\n112\nQueens County\nNew York\n0.874\n8.61\n7.523\n\n\n137\nCalvert County\nMaryland\n0.802\n8.19\n6.567\n\n\n144\nClackamas County\nOregon\n0.984\n6.51\n6.406\n\n\n148\nWashington County\nPennsylvania\n0.767\n8.01\n6.145\n\n\n154\nOrange County\nNew York\n0.991\n5.98\n5.925\n\n\n159\nMonmouth County\nNew Jersey\n0.999\n5.80\n5.795\n\n\n179\nCleveland County\nOklahoma\n0.958\n5.36\n5.136\n\n\n205\nRadford City\nVirginia\n0.460\n10.06\n4.631\n\n\n206\nMarion County\nOregon\n0.944\n4.89\n4.617\n\n\n217\nSonoma County\nCalifornia\n0.982\n4.54\n4.464\n\n\n226\nRock Island County\nIllinois\n0.820\n5.24\n4.294\n\n\n228\nCharles County\nMaryland\n0.855\n4.99\n4.266\n\n\n229\nSchenectady County\nNew York\n0.851\n5.00\n4.252\n\n\n243\nTulare County\nCalifornia\n0.956\n4.13\n3.946\n\n\n278\nEscambia County\nFlorida\n0.893\n3.85\n3.439\n\n\n289\nSt. Clair County\nIllinois\n0.988\n3.33\n3.293\n\n\n308\nRoanoke City\nVirginia\n0.855\n3.68\n3.147\n\n\n321\nLewis and Clark County\nMontana\n0.631\n4.62\n2.917\n\n\n331\nRoanoke County\nVirginia\n0.741\n3.74\n2.772\n\n\n345\nLebanon County\nPennsylvania\n0.428\n6.16\n2.632\n\n\n346\nHouston County\nGeorgia\n0.922\n2.83\n2.608\n\n\n381\nTuscaloosa County\nAlabama\n0.964\n2.39\n2.302\n\n\n384\nClarke County\nGeorgia\n0.944\n2.42\n2.288\n\n\n387\nCarroll County\nMaryland\n0.891\n2.56\n2.284\n\n\n389\nWayne County\nNew York\n0.863\n2.61\n2.255\n\n\n405\nAlamance County\nNorth Carolina\n0.814\n2.62\n2.129\n\n\n408\nPasco County\nFlorida\n0.471\n4.50\n2.117\n\n\n414\nPickens County\nSouth Carolina\n0.858\n2.44\n2.096\n\n\n440\nAugusta County\nVirginia\n0.731\n2.64\n1.927\n\n\n441\nSt. Croix County\nWisconsin\n0.947\n2.03\n1.925\n\n\n447\nUlster County\nNew York\n0.820\n2.30\n1.882\n\n\n450\nClark County\nWashington\n0.155\n12.14\n1.877\n\n\n464\nBeaufort County\nSouth Carolina\n0.464\n3.90\n1.806\n\n\n481\nBonneville County\nIdaho\n0.610\n2.82\n1.716\n\n\n489\nLee County\nNorth Carolina\n0.509\n3.32\n1.687\n\n\n493\nMerrimack County\nNew Hampshire\n0.724\n2.30\n1.668\n\n\n503\nAnderson County\nSouth Carolina\n0.967\n1.68\n1.628\n\n\n530\nTompkins County\nNew York\n0.640\n2.38\n1.522\n\n\n534\nPulaski County\nVirginia\n0.278\n5.39\n1.498\n\n\n563\nMadison County\nNorth Carolina\n0.474\n2.91\n1.377\n\n\n565\nClay County\nFlorida\n0.847\n1.62\n1.372\n\n\n583\nGrand Traverse County\nMichigan\n0.827\n1.55\n1.286\n\n\n606\nAdams County\nOhio\n0.483\n2.42\n1.169\n\n\n611\nManitowoc County\nWisconsin\n0.530\n2.17\n1.153\n\n\n612\nCampbell County\nKentucky\n0.860\n1.33\n1.146\n\n\n618\nLa Crosse County\nWisconsin\n0.682\n1.65\n1.126\n\n\n629\nKlickitat County\nWashington\n0.408\n2.68\n1.092"
+  },
+  {
+    "objectID": "04-emerging.html#investment-thesis-interpretation",
+    "href": "04-emerging.html#investment-thesis-interpretation",
+    "title": "Emerging Markets",
+    "section": "Investment Thesis Interpretation",
+    "text": "Investment Thesis Interpretation\nThree distinct opportunity profiles emerge from the top emerging markets:\nProfile 1 — Metro Adjacency (e.g., New Hanover NC, Monmouth NJ) Counties adjacent to established DC markets that have absorbed surrounding infrastructure development (grid, fiber, labor) without yet attracting operators. These are likely to see activity as primary markets become capacity-constrained.\nProfile 2 — Underserved Regional Hubs (e.g., Mercer NJ, Clackamas OR) Mid-size metros with strong structural foundations but no historical DC presence. Often offer lower land costs than primary markets with comparable grid and labor depth.\nProfile 3 — Policy-Driven Opportunities (e.g., Sussex DE, Calvert MD) Counties in states with favorable data center tax incentives and regulatory environments. The policy signal (policy_direction_score) contributes positively to attractiveness even where other structural factors are more moderate.\n\n\n\n\n\n\nNote\n\n\n\nLimitation: This model captures structural conditions but cannot account for announced but not-yet-built capacity, utility queue positions, or off-market land deals. Real investment decisions require augmenting these signals with proprietary market intelligence."
+  }
+]
