@@ -115,8 +115,7 @@ with st.sidebar:
     )
     st.markdown("---")
     st.markdown(
-        "[📄 GitHub](https://github.com/RX67-RX67/data-center-siting-analysis)  \n"
-        "[📚 Tutorial](https://github.com/RX67-RX67/data-center-siting-analysis/blob/main/TUTORIAL.md)"
+        "[📄 GitHub](https://github.com/RX67-RX67/data-center-siting-analysis)"
     )
 
 
