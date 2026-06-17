@@ -21,7 +21,7 @@ website:
       - icon: github
         href: https://github.com/RX67-RX67/data-center-siting-analysis
   page-footer:
-    center: "Data Center Siting Analysis · Georgetown University · 2025"
+    center: "Data Center Siting Analysis · Ruijie Xu · 2025"
 
 format:
   html:

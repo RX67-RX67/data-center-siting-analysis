@@ -1,7 +1,7 @@
 ---
 title: "US Data Center Siting Analysis"
 subtitle: "A structural county-level model of data center location drivers"
-author: "Georgetown University · 2025"
+author: "Ruijie Xu"
 jupyter: python3
 ---
 
