@@ -1,0 +1,32 @@
+# custom
+reference/
+data/
+document/
+images/
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# env
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# pytest
+.pytest_cache/
+
+# Claude Code
+.claude/
+_site/
+.quarto/
+*.quarto_ipynb

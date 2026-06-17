@@ -1,0 +1,56 @@
+mentioned_state,mentioned_county,has_policy_signal,policy_direction_score
+California,Imperial County,1,0.25
+California,Orange County,1,0.0
+Connecticut,Middletown County,1,0.0
+Florida,Palm Beach County,1,0.0
+Georgia,Athens-Clarke County,1,0.0
+Georgia,Bulloch County,1,0.0
+Georgia,Fayette County,1,1.0
+Georgia,Hall County,1,0.0
+Georgia,Irwin County,1,0.0
+Georgia,Monroe County,1,1.0
+Georgia,Newton County,1,0.0
+Georgia,Pike County,1,0.0
+Georgia,Spalding County,1,1.0
+Illinois,Champaign County,1,1.0
+Illinois,Fulton County,1,0.0
+Illinois,Lake County,1,1.0
+Illinois,Logan County,1,1.0
+Illinois,Madison County,1,0.0
+Illinois,Sangamon County,1,1.0
+Iowa,Linn County,1,1.0
+Kansas,Miami County,1,0.0
+Kentucky,Mason County,1,1.0
+Kentucky,Mercer County,1,-0.5
+Kentucky,Simpson County,1,-1.0
+Maryland,Baltimore County,1,0.0
+Maryland,Calvert County,1,1.0
+Michigan,Washtenaw County,1,0.0
+Missouri,St. Charles County,1,0.0
+New York,Genesee County,1,1.0
+North Carolina,Chatham County,1,-1.0
+Ohio,Scioto County,1,1.0
+Ohio,Summit County,1,0.0
+Pennsylvania,Berks County,1,0.0
+Pennsylvania,Bucks County,1,1.0
+Pennsylvania,Cumberland County,1,0.3333333333333333
+Pennsylvania,Franklin County,1,1.0
+Pennsylvania,Lackawanna County,1,0.0
+Pennsylvania,Montour County,1,-1.0
+South Carolina,Colleton County,1,0.0
+South Carolina,Marion County,1,1.0
+South Carolina,Spartanburg County,1,1.0
+Texas,Cameron County,1,1.0
+Texas,Hood County,1,-0.25
+Texas,Pecos County,1,1.0
+Texas,Williamson County,1,1.0
+Texas,Wilson County,1,-1.0
+Virginia,Albemarle County,1,0.0
+Virginia,Campbell County,1,0.0
+Virginia,Culpeper County,1,-1.0
+Virginia,Lee County,1,1.0
+Virginia,Loudon County,1,0.0
+Virginia,Loudoun County,1,0.625
+Virginia,Orange County,1,0.0
+Virginia,Prince William County,1,1.0
+Wisconsin,Racine County,1,1.0
